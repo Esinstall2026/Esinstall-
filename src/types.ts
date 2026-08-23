@@ -27,3 +27,18 @@ export interface Job {
   date: string;
   status: JobStatus;
 }
+
+export type ProductionStatus = "Pending" | "Cutting" | "Polishing" | "Separated" | "Ready";
+
+export interface ProductionRecord {
+  jobId: string;
+  material: "Granite" | "Marble" | "Porcelain";
+  slabCount: number;
+  squareFeet: number;
+  sinkType: "Undermount" | "Farmhouse" | "Topmount" | "None";
+  caulkTubes: number;
+  clips: number;
+  status: ProductionStatus;
+  updatedAt: string;
+  notes: string;
+}
