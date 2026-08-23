@@ -13,7 +13,7 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: var(--bg); }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { cursor: pointer; }
 .app-shell { min-height: 100vh; display: flex; background: radial-gradient(circle at 70% -20%, #252018 0, transparent 35%), var(--bg); }
 .sidebar { width: 260px; border-right: 1px solid var(--border); padding: 24px 16px; position: fixed; inset: 0 auto 0 0; background: #0c0c0e; display: flex; flex-direction: column; }
@@ -46,6 +46,8 @@ nav { display: grid; gap: 4px; }
 .primary:hover { background: var(--gold2); }
 .primary.small { padding: 9px 12px; }
 .ghost { background: transparent; color: var(--gold2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 11px; font-size: 11px; }
+.ghost.danger { color: #e8a4a4; }
+.button-group { display: flex; gap: 7px; }
 .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 18px 0; }
 .metric-card, .panel { border: 1px solid var(--border); background: rgba(17,17,20,.92); border-radius: 12px; }
 .metric-card { padding: 20px; }
@@ -66,7 +68,7 @@ nav { display: grid; gap: 4px; }
 .job-main span { color: var(--muted); font-size: 10px; margin-top: 4px; }
 .arrow { color: var(--gold); }
 .status { display: inline-flex; width: max-content; border: 1px solid #3a3a40; border-radius: 999px; padding: 5px 8px; font-size: 9px; font-weight: 800; color: #cfcfd4; white-space: nowrap; }
-.status-installation, .status-production { color: var(--gold2); border-color: #66552e; background: #211c11; }
+.status-installation, .status-production, .status-ready-for-installation { color: var(--gold2); border-color: #66552e; background: #211c11; }
 .status-completed { color: #8fd19c; border-color: #2d5536; background: #101b13; }
 .status-warranty { color: #e8a4a4; border-color: #5d3434; background: #1b1111; }
 .agenda { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; }
@@ -88,6 +90,11 @@ nav { display: grid; gap: 4px; }
 .info-row { display: flex; justify-content: space-between; gap: 20px; padding: 12px 0; border-top: 1px solid var(--border); }
 .info-row span { color: var(--muted); font-size: 11px; }
 .info-row strong { font-size: 11px; text-align: right; }
+.edit-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field { display: grid; gap: 6px; }
+.field > span { color: var(--muted); font-size: 10px; }
+.field input, .field select { width: 100%; border: 1px solid var(--border); border-radius: 7px; background: #0c0c0e; color: #fff; padding: 10px; outline: none; font-size: 11px; }
+.field input:focus, .field select:focus { border-color: #6b572c; }
 .timeline { display: grid; gap: 12px; }
 .timeline-item { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 11px; }
 .timeline-item.done { color: #eee; }
@@ -97,6 +104,13 @@ nav { display: grid; gap: 4px; }
 .upload-icon { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--gold); border-radius: 50%; color: var(--gold); }
 .upload-zone strong { color: #eee; font-size: 12px; }
 .upload-zone span { font-size: 10px; }
+.upload-button { display: inline-flex; align-items: center; cursor: pointer; }
+.upload-button input { display: none; }
+.evidence-list { display: grid; gap: 8px; }
+.evidence-row { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.evidence-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 6px; background: #18181c; color: var(--gold); }
+.evidence-row strong, .evidence-row small { display: block; font-size: 10px; }
+.evidence-row small { color: var(--muted); margin-top: 3px; }
 .history { display: grid; }
 .history-row { display: grid; grid-template-columns: 130px 1fr; gap: 20px; padding: 13px 0; border-top: 1px solid var(--border); }
 .history-row > span { color: var(--muted); font-size: 10px; }
@@ -130,4 +144,7 @@ nav { display: grid; gap: 4px; }
   .job-row { grid-template-columns: 1fr auto; }
   .job-code { grid-column: 1 / -1; }
   .job-main { grid-column: 1 / -1; }
+  .edit-form { grid-template-columns: 1fr; }
+  .evidence-row { grid-template-columns: 34px 1fr; }
+  .evidence-row .ghost { grid-column: 2; justify-self: start; }
 }
