@@ -1,4 +1,4 @@
-import { ChangeEvent, useMemo, useState } from "react";
+import { ChangeEvent, type ReactNode, useMemo, useState } from "react";
 import { builders, communities, jobs as seedJobs, teams } from "./data";
 import { Job, JobStatus, Page } from "./types";
 
@@ -128,7 +128,7 @@ function EditForm({ draft, setDraft }: { draft: Job; setDraft: (job: Job) => voi
   </div>;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="field"><span>{label}</span>{children}</label>; }
+function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label>; }
 
 function ModulePlaceholder({ page }: { page: Page }) { const descriptions: Record<string, string> = { Installations: "Installation scheduling, teams in field and completion tracking.", Warranty: "Open warranty cases, evidence and resolution tracking.", Reports: "Operational reports and performance indicators.", Teams: "Installation teams, assignments and field status.", Builders: "Builder directory and job relationships.", Communities: "Community directory and job relationships.", Settings: "System configuration, roles and future integrations." }; return <div className="content empty-module"><div className="module-card"><div className="large-icon">ES</div><span className="gold-label">MODULE READY</span><h2>{page}</h2><p>{descriptions[page]}</p><span className="muted">UI foundation created · Backend integration is the next development layer.</span></div></div>; }
 function Status({ status }: { status: string }) { return <span className={`status status-${status.toLowerCase().replaceAll(" ", "-")}`}>{status}</span>; }
