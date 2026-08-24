@@ -2,6 +2,7 @@ export type Page =
   | "Dashboard"
   | "Jobs"
   | "Job Folder"
+  | "Production"
   | "Installations"
   | "Warranty"
   | "Reports"
