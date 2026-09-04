@@ -45,6 +45,19 @@ export default function App() {
   const updateInstallation = (value: Installation) => {
     const next = installations.some(i => i.jobId === value.jobId) ? installations.map(i => i.jobId === value.jobId ? value : i) : [...installations, value];
     setInstallations(next); write("es-install-installations-v1", next);
+
+    const job = jobs.find(j => j.id === value.jobId);
+    if (job) {
+      const nextStatus: JobStatus =
+        value.status === "Completed"
+          ? "Completed"
+          : value.status === "In Progress"
+            ? "Installation"
+            : job.status === "Completed" || job.status === "Warranty"
+              ? job.status
+              : "Ready for Installation";
+      if (job.status !== nextStatus) updateJob({ ...job, status: nextStatus });
+    }
   };
   const updateWarranty = (value: WarrantyCase) => {
     const next = warranties.some(w => w.jobId === value.jobId) ? warranties.map(w => w.jobId === value.jobId ? value : w) : [...warranties, value];
