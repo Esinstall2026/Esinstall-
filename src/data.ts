@@ -36,6 +36,15 @@ export const jobs: Job[] = [
     team: "Team Alpha",
     date: "2026-08-12",
     status: "Warranty"
+  },
+  {
+    id: "JOB-1005",
+    address: "562 Palm Ridge Ave",
+    builder: "Prime Homes",
+    community: "Palm Ridge",
+    team: "Team Bravo",
+    date: "2026-09-05",
+    status: "Scheduled"
   }
 ];
 
