@@ -62,6 +62,11 @@ export default function App() {
   const updateWarranty = (value: WarrantyCase) => {
     const next = warranties.some(w => w.jobId === value.jobId) ? warranties.map(w => w.jobId === value.jobId ? value : w) : [...warranties, value];
     setWarranties(next); write("es-install-warranty-v1", next);
+
+    const job = jobs.find(j => j.id === value.jobId);
+    if (job && value.status !== "Resolved" && job.status === "Completed") {
+      updateJob({ ...job, status: "Warranty" });
+    }
   };
   const updateProduction = (value: ProductionRecord) => {
     const next = production.some(p => p.jobId === value.jobId) ? production.map(p => p.jobId === value.jobId ? value : p) : [...production, value];
