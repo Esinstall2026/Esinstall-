@@ -2,7 +2,7 @@ name: Deploy ES INSTALL to GitHub Pages
 
 on:
   push:
-    branches: [codex/v11-final]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ./dist
 
@@ -46,5 +46,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-# V11 redeploy trigger: publish the current codex/v11-final build.
