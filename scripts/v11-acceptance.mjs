@@ -12,7 +12,7 @@ assert.match(dataSource, /status:\s*"Scheduled"/);
 assert.match(productionSource, /jobId:\s*"JOB-1005"/);
 assert.match(enhancedSource, /es-install-jobs-v1/);
 assert.match(enhancedSource, /es-install-installations-v1/);
-assert.match(enhancedSource, /es-install-production-v1/);
+assert.match(productionSource, /es-install-production-v1/);
 assert.match(appSource, /updateProduction/);
 assert.match(appSource, /updateInstallation/);
 assert.match(appSource, /updateWarranty/);
