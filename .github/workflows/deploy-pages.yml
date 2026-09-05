@@ -46,3 +46,5 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+# V11 redeploy trigger: publish the current codex/v11-final build.
