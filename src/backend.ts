@@ -10,10 +10,18 @@ export type BackendProvider = {
   saveWarranties(items: Warranty[]): Promise<void>;
 };
 
-/**
- * Local adapter used by the GitHub Pages pilot.
- * A real API/DB adapter can implement the same contract without changing UI modules.
- */
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "");
+
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  if (!API_BASE_URL) throw new Error("VITE_API_BASE_URL is not configured");
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  });
+  if (!response.ok) throw new Error(`API ${response.status}: ${response.statusText}`);
+  return response.json() as Promise<T>;
+}
+
 export const localBackend: BackendProvider = {
   async getJobs() { return dataService.getJobs(); },
   async saveJobs(jobs) { dataService.saveJobs(jobs); },
@@ -23,6 +31,15 @@ export const localBackend: BackendProvider = {
   async saveWarranties(items) { dataService.saveWarranties(items); },
 };
 
+export const apiBackend: BackendProvider = {
+  getJobs: () => api<Job[]>("/jobs"),
+  saveJobs: (jobs) => api<void>("/jobs", { method: "PUT", body: JSON.stringify(jobs) }),
+  getInstallations: () => api<Installation[]>("/installations"),
+  saveInstallations: (items) => api<void>("/installations", { method: "PUT", body: JSON.stringify(items) }),
+  getWarranties: () => api<Warranty[]>("/warranties"),
+  saveWarranties: (items) => api<void>("/warranties", { method: "PUT", body: JSON.stringify(items) }),
+};
+
 export function createBackendProvider(): BackendProvider {
-  return localBackend;
+  return API_BASE_URL ? apiBackend : localBackend;
 }
