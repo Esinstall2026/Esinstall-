@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import App from "./App";
 import NewJobPage from "./NewJobPage";
 import NewWarrantyPage, { type WarrantyCase } from "./NewWarrantyPage";
@@ -21,36 +22,37 @@ export default function EnhancedRoot() {
   const [warrantyJobId, setWarrantyJobId] = useState("");
 
   useEffect(() => {
-    const patchButtons = () => {
-      const buttons = Array.from(document.querySelectorAll("button"));
-      const newJobButton = buttons.find(item => item.textContent?.trim() === "+ New Job") as HTMLButtonElement | undefined;
-      if (newJobButton && newJobButton.dataset.esInstallPatched !== "true") {
-        newJobButton.dataset.esInstallPatched = "true";
-        const handler = (event: Event) => { event.preventDefault(); event.stopPropagation(); setShowNewJob(true); };
-        newJobButton.addEventListener("click", handler, true);
+    const handleGlobalClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest("button");
+      if (!button) return;
+      const label = button.textContent?.trim();
+
+      if (label === "+ New Job") {
+        event.preventDefault();
+        event.stopPropagation();
+        setShowNewJob(true);
+        return;
       }
 
-      const newWarrantyButton = buttons.find(item => item.textContent?.trim() === "+ New Warranty") as HTMLButtonElement | undefined;
-      if (newWarrantyButton && newWarrantyButton.dataset.esInstallWarrantyPatched !== "true") {
-        newWarrantyButton.dataset.esInstallWarrantyPatched = "true";
-        const handler = (event: Event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
-          const installations = read<Installation[]>("es-install-installations-v1", []);
-          const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
-          const eligible = jobs.filter(job => installations.some(item => item.jobId === job.id && item.status === "Completed") || job.status === "Warranty" || warranties.some(item => item.jobId === job.id));
-          setWarrantyJobId(eligible[0]?.id ?? jobs[0]?.id ?? "");
-          setShowNewWarranty(true);
-        };
-        newWarrantyButton.addEventListener("click", handler, true);
+      if (label === "+ New Warranty") {
+        event.preventDefault();
+        event.stopPropagation();
+        const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
+        const installations = read<Installation[]>("es-install-installations-v1", []);
+        const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
+        const eligible = jobs.filter(job =>
+          installations.some(item => item.jobId === job.id && item.status === "Completed") ||
+          job.status === "Warranty" ||
+          warranties.some(item => item.jobId === job.id)
+        );
+        setWarrantyJobId(eligible[0]?.id ?? jobs[0]?.id ?? "");
+        setShowNewWarranty(true);
       }
     };
 
-    patchButtons();
-    const observer = new MutationObserver(patchButtons);
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    document.addEventListener("click", handleGlobalClick, true);
+    return () => document.removeEventListener("click", handleGlobalClick, true);
   }, []);
 
   const createJob = (job: Job) => {
@@ -58,14 +60,38 @@ export default function EnhancedRoot() {
     if (jobs.some(item => item.id.toUpperCase() === job.id.toUpperCase())) return;
     write("es-install-jobs-v1", [...jobs, job]);
 
-    const installations = read<Installation[]>("es-install-installations-v1", seedJobs.map((item, index) => ({ jobId: item.id, team: item.team, date: item.date, time: index % 2 ? "10:00 AM" : "8:00 AM", status: item.status === "Installation" ? "In Progress" : "Scheduled", notes: "" })));
+    const installations = read<Installation[]>(
+      "es-install-installations-v1",
+      seedJobs.map((item, index) => ({
+        jobId: item.id,
+        team: item.team,
+        date: item.date,
+        time: index % 2 ? "10:00 AM" : "8:00 AM",
+        status: item.status === "Installation" ? "In Progress" : "Scheduled",
+        notes: ""
+      }))
+    );
     if (!installations.some(item => item.jobId === job.id)) {
-      write("es-install-installations-v1", [...installations, { jobId: job.id, team: job.team, date: job.date, time: "8:00 AM", status: "Scheduled", notes: "" }]);
+      write("es-install-installations-v1", [
+        ...installations,
+        { jobId: job.id, team: job.team, date: job.date, time: "8:00 AM", status: "Scheduled", notes: "" }
+      ]);
     }
 
     const production = loadProduction();
     if (!production.some(item => item.jobId === job.id)) {
-      const record: ProductionRecord = { jobId: job.id, material: "Granite", slabCount: 0, squareFeet: 0, sinkType: "None", caulkTubes: 0, clips: 0, status: "Pending", updatedAt: new Date().toISOString(), notes: "New job created from Jobs." };
+      const record: ProductionRecord = {
+        jobId: job.id,
+        material: "Granite",
+        slabCount: 0,
+        squareFeet: 0,
+        sinkType: "None",
+        caulkTubes: 0,
+        clips: 0,
+        status: "Pending",
+        updatedAt: new Date().toISOString(),
+        notes: "New job created from Jobs."
+      };
       saveProduction([...production, record]);
     }
     setShowNewJob(false);
@@ -74,7 +100,9 @@ export default function EnhancedRoot() {
 
   const createWarranty = (value: WarrantyCase) => {
     const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
-    const next = warranties.some(item => item.jobId === value.jobId) ? warranties.map(item => item.jobId === value.jobId ? value : item) : [...warranties, value];
+    const next = warranties.some(item => item.jobId === value.jobId)
+      ? warranties.map(item => item.jobId === value.jobId ? value : item)
+      : [...warranties, value];
     write("es-install-warranty-v1", next);
 
     const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
@@ -90,25 +118,59 @@ export default function EnhancedRoot() {
     const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
     const installations = read<Installation[]>("es-install-installations-v1", []);
     const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
-    return jobs.filter(job => installations.some(item => item.jobId === job.id && item.status === "Completed") || job.status === "Warranty" || warranties.some(item => item.jobId === job.id));
+    return jobs.filter(job =>
+      installations.some(item => item.jobId === job.id && item.status === "Completed") ||
+      job.status === "Warranty" ||
+      warranties.some(item => item.jobId === job.id)
+    );
   })();
 
   return <>
     <App />
     {showNewJob && <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Create new job">
       <div style={modalStyle}>
-        <button className="ghost" style={{position:"absolute",right:18,top:18,zIndex:2}} onClick={() => setShowNewJob(false)}>Close</button>
+        <button className="ghost" style={closeStyle} onClick={() => setShowNewJob(false)}>Close</button>
         <NewJobPage onCreate={createJob} onCancel={() => setShowNewJob(false)} />
       </div>
     </div>}
     {showNewWarranty && <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Create new warranty">
       <div style={modalStyle}>
-        <button className="ghost" style={{position:"absolute",right:18,top:18,zIndex:2}} onClick={() => setShowNewWarranty(false)}>Close</button>
-        <NewWarrantyPage jobs={warrantyJobs} initialJobId={warrantyJobId} onCreate={createWarranty} onCancel={() => setShowNewWarranty(false)} />
+        <button className="ghost" style={closeStyle} onClick={() => setShowNewWarranty(false)}>Close</button>
+        <NewWarrantyPage
+          jobs={warrantyJobs}
+          initialJobId={warrantyJobId}
+          onCreate={createWarranty}
+          onCancel={() => setShowNewWarranty(false)}
+        />
       </div>
     </div>}
   </>;
 }
 
-const overlayStyle: React.CSSProperties = { position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,.78)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18, overflowY: "auto" };
-const modalStyle: React.CSSProperties = { position: "relative", width: "min(900px, 100%)", maxHeight: "94vh", overflowY: "auto", background: "#0b0b0d", border: "1px solid #3b3321", borderRadius: 16, boxShadow: "0 24px 80px rgba(0,0,0,.55)" };
+const overlayStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 1000,
+  background: "rgba(0,0,0,.78)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 18,
+  overflowY: "auto"
+};
+const modalStyle: CSSProperties = {
+  position: "relative",
+  width: "min(900px, 100%)",
+  maxHeight: "94vh",
+  overflowY: "auto",
+  background: "#0b0b0d",
+  border: "1px solid #3b3321",
+  borderRadius: 16,
+  boxShadow: "0 24px 80px rgba(0,0,0,.55)"
+};
+const closeStyle: CSSProperties = {
+  position: "absolute",
+  right: 18,
+  top: 18,
+  zIndex: 2
+};
