@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:access": "node scripts/v12-access-acceptance.mjs",
-    "test:acceptance": "node scripts/v11-acceptance.mjs && npm run test:access"
+    "test:v13": "node scripts/v11-acceptance.mjs && npm run test:access",
+    "test:v14": "node scripts/v14-backend-acceptance.mjs",
+    "test:acceptance": "npm run test:v13 && npm run test:v14"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
