@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import App from "./App";
 import NewJobPage from "./NewJobPage";
+import NewWarrantyPage, { type WarrantyCase } from "./NewWarrantyPage";
 import { loadProduction, saveProduction } from "./production";
 import { jobs as seedJobs } from "./data";
 import type { Job, ProductionRecord } from "./types";
@@ -16,24 +17,38 @@ function write<T>(key: string, value: T) {
 
 export default function EnhancedRoot() {
   const [showNewJob, setShowNewJob] = useState(false);
+  const [showNewWarranty, setShowNewWarranty] = useState(false);
+  const [warrantyJobId, setWarrantyJobId] = useState("");
 
   useEffect(() => {
-    const patchNewJobButton = () => {
+    const patchButtons = () => {
       const buttons = Array.from(document.querySelectorAll("button"));
-      const button = buttons.find(item => item.textContent?.trim() === "+ New Job") as HTMLButtonElement | undefined;
-      if (!button || button.dataset.esInstallPatched === "true") return;
-      button.dataset.esInstallPatched = "true";
-      const handler = (event: Event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        setShowNewJob(true);
-      };
-      button.addEventListener("click", handler, true);
-      (button as HTMLButtonElement & { __esInstallHandler?: EventListener }).__esInstallHandler = handler;
+      const newJobButton = buttons.find(item => item.textContent?.trim() === "+ New Job") as HTMLButtonElement | undefined;
+      if (newJobButton && newJobButton.dataset.esInstallPatched !== "true") {
+        newJobButton.dataset.esInstallPatched = "true";
+        const handler = (event: Event) => { event.preventDefault(); event.stopPropagation(); setShowNewJob(true); };
+        newJobButton.addEventListener("click", handler, true);
+      }
+
+      const newWarrantyButton = buttons.find(item => item.textContent?.trim() === "+ New Warranty") as HTMLButtonElement | undefined;
+      if (newWarrantyButton && newWarrantyButton.dataset.esInstallWarrantyPatched !== "true") {
+        newWarrantyButton.dataset.esInstallWarrantyPatched = "true";
+        const handler = (event: Event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
+          const installations = read<Installation[]>("es-install-installations-v1", []);
+          const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
+          const eligible = jobs.filter(job => installations.some(item => item.jobId === job.id && item.status === "Completed") || job.status === "Warranty" || warranties.some(item => item.jobId === job.id));
+          setWarrantyJobId(eligible[0]?.id ?? jobs[0]?.id ?? "");
+          setShowNewWarranty(true);
+        };
+        newWarrantyButton.addEventListener("click", handler, true);
+      }
     };
 
-    patchNewJobButton();
-    const observer = new MutationObserver(patchNewJobButton);
+    patchButtons();
+    const observer = new MutationObserver(patchButtons);
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, []);
@@ -57,12 +72,39 @@ export default function EnhancedRoot() {
     window.location.reload();
   };
 
+  const createWarranty = (value: WarrantyCase) => {
+    const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
+    const next = warranties.some(item => item.jobId === value.jobId) ? warranties.map(item => item.jobId === value.jobId ? value : item) : [...warranties, value];
+    write("es-install-warranty-v1", next);
+
+    const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
+    const job = jobs.find(item => item.id === value.jobId);
+    if (job && value.status !== "Resolved" && job.status === "Completed") {
+      write("es-install-jobs-v1", jobs.map(item => item.id === job.id ? { ...item, status: "Warranty" } : item));
+    }
+    setShowNewWarranty(false);
+    window.location.reload();
+  };
+
+  const warrantyJobs = (() => {
+    const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
+    const installations = read<Installation[]>("es-install-installations-v1", []);
+    const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
+    return jobs.filter(job => installations.some(item => item.jobId === job.id && item.status === "Completed") || job.status === "Warranty" || warranties.some(item => item.jobId === job.id));
+  })();
+
   return <>
     <App />
     {showNewJob && <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Create new job">
       <div style={modalStyle}>
-        <button className="ghost" style={{position:"absolute",right:18,top:18}} onClick={() => setShowNewJob(false)}>Close</button>
+        <button className="ghost" style={{position:"absolute",right:18,top:18,zIndex:2}} onClick={() => setShowNewJob(false)}>Close</button>
         <NewJobPage onCreate={createJob} onCancel={() => setShowNewJob(false)} />
+      </div>
+    </div>}
+    {showNewWarranty && <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Create new warranty">
+      <div style={modalStyle}>
+        <button className="ghost" style={{position:"absolute",right:18,top:18,zIndex:2}} onClick={() => setShowNewWarranty(false)}>Close</button>
+        <NewWarrantyPage jobs={warrantyJobs} initialJobId={warrantyJobId} onCreate={createWarranty} onCancel={() => setShowNewWarranty(false)} />
       </div>
     </div>}
   </>;
