@@ -1,56 +1,67 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import "./auth.css";
+import { supabase } from "./supabaseClient";
 
 export type AccessRole = "Admin" | "User";
 export type AccessUser = { username: string; displayName: string; role: AccessRole; team?: string };
-type SeedUser = AccessUser & { password: string };
-
-const USERS: SeedUser[] = [
-  { username: "admin", password: "demo", displayName: "Administrator", role: "Admin" },
-  { username: "teambravo", password: "demo", displayName: "Team Bravo User", role: "User", team: "Team Bravo" },
-  { username: "teamalpha", password: "demo", displayName: "Team Alpha User", role: "User", team: "Team Alpha" },
-  { username: "teamcharlie", password: "demo", displayName: "Team Charlie User", role: "User", team: "Team Charlie" }
-];
-
 const SESSION_KEY = "es-install-session-v1";
+const TEAMS = ["Team Alpha", "Team Bravo", "Team Charlie"];
 
-export function getSession(): AccessUser | null {
-  try { const raw = localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) as AccessUser : null; } catch { return null; }
+function saveUser(user: AccessUser) { localStorage.setItem(SESSION_KEY, JSON.stringify(user)); }
+export function getSession(): AccessUser | null { try { const raw = localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) as AccessUser : null; } catch { return null; } }
+export async function signOut() { await supabase.auth.signOut(); localStorage.removeItem(SESSION_KEY); window.location.reload(); }
+
+async function profileFor(userId: string, email: string): Promise<AccessUser> {
+  const { data, error } = await supabase.from("profiles").select("display_name,role,team").eq("id", userId).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Usuário autenticado sem perfil. Peça ao administrador para configurar o acesso.");
+  return { username: email, displayName: data.display_name, role: data.role, team: data.team || undefined };
 }
-export function signOut() { localStorage.removeItem(SESSION_KEY); window.location.reload(); }
-export function authenticate(username: string, password: string): AccessUser | null {
-  const found = USERS.find(user => user.username === username.trim().toLowerCase() && user.password === password);
-  if (!found) return null;
-  const session: AccessUser = { username: found.username, displayName: found.displayName, role: found.role, team: found.team };
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  return session;
+
+export async function authenticate(email: string, secret: string): Promise<AccessUser> {
+  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: secret });
+  if (error || !data.user) throw error || new Error("Usuário ou senha inválidos.");
+  const user = await profileFor(data.user.id, data.user.email || email);
+  saveUser(user); return user;
+}
+
+async function register(email: string, secret: string, displayName: string, team: string): Promise<string> {
+  const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password: secret });
+  if (error || !data.user) throw error || new Error("Não foi possível criar o usuário.");
+  if (!data.session) return "Cadastro criado. Confirme o e-mail e depois faça login.";
+  const { error: profileError } = await supabase.from("profiles").insert({ id: data.user.id, display_name: displayName, role: "User", team });
+  if (profileError) throw profileError;
+  saveUser({ username: data.user.email || email, displayName, role: "User", team });
+  return "Acesso criado com sucesso.";
 }
 
 export function LoginScreen() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [showDemo, setShowDemo] = useState(false);
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    setError("");
-    if (!authenticate(username, password)) { setError("Usuário ou senha inválidos."); return; }
-    window.location.reload();
-  };
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState(""); const [secret, setSecret] = useState(""); const [displayName, setDisplayName] = useState(""); const [team, setTeam] = useState(TEAMS[0]); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  const submit = async (event: FormEvent) => { event.preventDefault(); setError(""); setBusy(true); try { if (mode === "login") { await authenticate(email, secret); window.location.reload(); } else { const message = await register(email, secret, displayName, team); if (getSession()) window.location.reload(); else setError(message); } } catch (e) { setError(e instanceof Error ? e.message : "Não foi possível concluir o acesso."); } finally { setBusy(false); } };
   return <div className="auth-shell"><div className="auth-card">
     <div className="brand auth-brand"><div className="brand-mark">ES</div><div><strong>ES INSTALL</strong><span>Operations Platform</span></div></div>
-    <span className="gold-label">SECURE ACCESS</span><h1>Sign in</h1><p className="muted">Acesse o ES INSTALL de acordo com o seu perfil.</p>
-    <form onSubmit={submit} className="auth-form"><label className="field"><span>Usuário</span><input autoComplete="username" value={username} onChange={e => setUsername(e.target.value)} placeholder="Digite seu usuário" /></label><label className="field"><span>Senha</span><input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Digite sua senha" /></label>{error && <div className="auth-error">{error}</div>}<button className="primary auth-submit" type="submit">Entrar no ES INSTALL →</button></form>
-    <button className="ghost auth-demo" onClick={() => setShowDemo(value => !value)}>{showDemo ? "Ocultar acessos de demonstração" : "Ver acessos de demonstração"}</button>
-    {showDemo && <div className="demo-box"><strong>Administrador</strong><span>admin / demo</span><strong>Usuário Team Bravo</strong><span>teambravo / demo</span></div>}
-    <small className="auth-note">Piloto V12 · autenticação local do navegador. Para produção, conectar banco central, sessão segura e gestão real de credenciais.</small>
+    <span className="gold-label">SECURE ACCESS</span><h1>{mode === "login" ? "Sign in" : "Criar acesso"}</h1><p className="muted">{mode === "login" ? "Acesse o ES INSTALL com sua conta central." : "Crie um usuário de equipe para o teste real de acesso."}</p>
+    <form onSubmit={submit} className="auth-form">
+      {mode === "register" && <label className="field"><span>Nome</span><input required value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Nome do usuário" /></label>}
+      <label className="field"><span>E-mail</span><input required type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} placeholder="usuario@empresa.com" /></label>
+      <label className="field"><span>Senha</span><input required minLength={6} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={secret} onChange={e => setSecret(e.target.value)} placeholder="Mínimo de 6 caracteres" /></label>
+      {mode === "register" && <label className="field"><span>Equipe</span><select value={team} onChange={e => setTeam(e.target.value)}>{TEAMS.map(t => <option key={t}>{t}</option>)}</select></label>}
+      {error && <div className="auth-error">{error}</div>}
+      <button className="primary auth-submit" disabled={busy} type="submit">{busy ? "Processando…" : mode === "login" ? "Entrar no ES INSTALL →" : "Criar usuário →"}</button>
+    </form>
+    <button className="ghost auth-demo" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>{mode === "login" ? "Criar acesso de usuário" : "Já tenho acesso · Entrar"}</button>
+    <small className="auth-note">V14 · autenticação central Supabase. Usuários de equipe entram como User e ficam vinculados à equipe selecionada. Perfil Admin deve ser atribuído pelo administrador.</small>
   </div></div>;
 }
 
 export function AccessGate({ children }: { children: ReactNode }) {
-  const session = useMemo(() => getSession(), []);
-  if (!session) return <LoginScreen />;
-  return <>{children}<div className="session-badge"><span>{session.displayName} · {session.role}{session.team ? ` · ${session.team}` : ""}</span><button onClick={signOut}>Sair</button></div></>;
+  const [ready, setReady] = useState(false); const [session, setSession] = useState<AccessUser | null>(() => getSession());
+  useEffect(() => { supabase.auth.getSession().then(async ({ data }) => { if (data.session && !getSession()) { try { const user = await profileFor(data.session.user.id, data.session.user.email || ""); setSession(user); saveUser(user); } catch { await supabase.auth.signOut(); } } setReady(true); }); const { data: listener } = supabase.auth.onAuthStateChange((_event, authSession) => { if (!authSession) { setSession(null); localStorage.removeItem(SESSION_KEY); } }); return () => listener.subscription.unsubscribe(); }, []);
+  const stableSession = useMemo(() => session, [session]);
+  if (!ready) return null;
+  if (!stableSession) return <LoginScreen />;
+  return <>{children}<div className="session-badge"><span>{stableSession.displayName} · {stableSession.role}{stableSession.team ? ` · ${stableSession.team}` : ""}</span><button onClick={() => signOut()}>Sair</button></div></>;
 }
 export function canAccessAdminModules(user: AccessUser) { return user.role === "Admin"; }
