@@ -6,10 +6,10 @@ import NewWarrantyPage, { type WarrantyCase } from "./NewWarrantyPage";
 import { loadProduction, saveProduction } from "./production";
 import { jobs as seedJobs } from "./data";
 import type { Job, ProductionRecord } from "./types";
+import { createBackendProvider } from "./backend";
 import { hydratePilotData } from "./backendSync";
 
 type Installation = { jobId: string; team: string; date: string; time: string; status: "Scheduled" | "In Progress" | "Completed"; notes: string };
-
 function read<T>(key: string, fallback: T): T { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; } }
 function write<T>(key: string, value: T) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ } }
 
@@ -17,6 +17,24 @@ export default function EnhancedRoot() {
   const [booted, setBooted] = useState(false); const [showNewJob, setShowNewJob] = useState(false); const [showNewWarranty, setShowNewWarranty] = useState(false); const [warrantyJobId, setWarrantyJobId] = useState("");
 
   useEffect(() => { hydratePilotData().finally(() => setBooted(true)); }, []);
+
+  useEffect(() => {
+    if (!booted) return;
+    const backend = createBackendProvider();
+    const originalSetItem = localStorage.setItem.bind(localStorage);
+    const sync = (key: string, raw: string) => {
+      try {
+        const value = JSON.parse(raw);
+        if (key === "es-install-jobs-v1") void backend.saveJobs(value as Job[]).catch(error => console.warn("Central jobs sync failed", error));
+        if (key === "es-install-installations-v1") void backend.saveInstallations(value as Installation[]).catch(error => console.warn("Central installations sync failed", error));
+        if (key === "es-install-warranty-v1") void backend.saveWarranties(value as WarrantyCase[]).catch(error => console.warn("Central warranty sync failed", error));
+        if (key === "es-install-production-v1") void backend.saveProduction(value as ProductionRecord[]).catch(error => console.warn("Central production sync failed", error));
+      } catch { /* ignore non-JSON values */ }
+    };
+    localStorage.setItem = ((key: string, value: string) => { originalSetItem(key, value); sync(key, value); }) as typeof localStorage.setItem;
+    return () => { localStorage.setItem = originalSetItem as typeof localStorage.setItem; };
+  }, [booted]);
+
   useEffect(() => {
     if (!booted) return;
     const handleGlobalClick = (event: MouseEvent) => {
@@ -44,7 +62,6 @@ export default function EnhancedRoot() {
     {showNewWarranty && <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Create new warranty"><div style={modalStyle}><button className="ghost" style={closeStyle} onClick={() => setShowNewWarranty(false)}>Close</button><NewWarrantyPage jobs={warrantyJobs} initialJobId={warrantyJobId} onCreate={createWarranty} onCancel={() => setShowNewWarranty(false)} /></div></div>}
   </>;
 }
-
 const overlayStyle: CSSProperties = { position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,.78)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18, overflowY: "auto" };
 const modalStyle: CSSProperties = { position: "relative", width: "min(900px, 100%)", maxHeight: "94vh", overflowY: "auto", background: "#0b0b0d", border: "1px solid #3b3321", borderRadius: 16, boxShadow: "0 24px 80px rgba(0,0,0,.55)" };
 const closeStyle: CSSProperties = { position: "absolute", right: 18, top: 18, zIndex: 2 };
