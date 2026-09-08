@@ -13,6 +13,7 @@
     "test:acceptance": "npm run test:v13 && npm run test:v14"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.57.0",
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^6.0.5",
     "typescript": "^5.7.2",
