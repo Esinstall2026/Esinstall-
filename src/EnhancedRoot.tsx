@@ -46,8 +46,6 @@ export default function EnhancedRoot() {
         const installations = read<Installation[]>("es-install-installations-v1", []);
         const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
         const eligible = jobs.filter(job => installations.some(item => item.jobId === job.id && item.status === "Completed") || job.status === "Warranty" || warranties.some(item => item.jobId === job.id));
-        // If there is no completed installation yet, still allow opening a warranty
-        // during the pilot so the user can test the complete workflow.
         const selectable = eligible.length ? eligible : jobs;
         setWarrantyJobId(selectable[0]?.id ?? "");
         setShowNewWarranty(true);
@@ -72,19 +70,23 @@ export default function EnhancedRoot() {
     const job = jobs.find(item => item.id === value.jobId);
     const nextJob = job && value.status !== "Resolved" && job.status === "Completed" ? { ...job, status: "Warranty" as const } : null;
     try {
-      // Await the central save before closing/reloading the modal.
       await backend.saveWarranties([value]);
       if (nextJob) await backend.saveJobs([nextJob]);
       write("es-install-warranty-v1", nextWarranties);
       if (nextJob) write("es-install-jobs-v1", jobs.map(item => item.id === nextJob.id ? nextJob : item));
-      setShowNewWarranty(false); window.location.reload();
+      setShowNewWarranty(false);
+      // Do not reload back to Dashboard. Open the Warranty module so the newly
+      // created case is immediately visible to the user.
+      window.setTimeout(() => {
+        const warrantyButton = Array.from(document.querySelectorAll("button")).find(button => button.textContent?.trim() === "Warranty") as HTMLButtonElement | undefined;
+        warrantyButton?.click();
+      }, 0);
     } catch (error) {
       console.error("Central warranty save failed", error);
       window.alert(`Não foi possível salvar a garantia no servidor central. ${error instanceof Error ? error.message : "Tente novamente."}`);
     }
   };
 
-  // Keep the same jobs available to the modal as the button selector, with a pilot fallback.
   const warrantyJobs = (() => { const jobs = read<Job[]>("es-install-jobs-v1", seedJobs); const installations = read<Installation[]>("es-install-installations-v1", []); const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []); const eligible = jobs.filter(job => installations.some(item => item.jobId === job.id && item.status === "Completed") || job.status === "Warranty" || warranties.some(item => item.jobId === job.id)); return eligible.length ? eligible : jobs; })();
 
   if (!booted) return <div className="auth-shell"><div className="auth-card"><span className="gold-label">ES INSTALL</span><h1>Conectando…</h1><p className="muted">Sincronizando os dados centrais com o dispositivo.</p></div></div>;
