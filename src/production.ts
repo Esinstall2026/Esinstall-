@@ -1,4 +1,5 @@
 import { ProductionRecord, ProductionStatus } from "./types";
+import { createBackendProvider } from "./backend";
 
 export const productionStatuses: ProductionStatus[] = ["Pending", "Cutting", "Polishing", "Separated", "Ready"];
 
@@ -16,4 +17,5 @@ export function loadProduction(): ProductionRecord[] {
 }
 export function saveProduction(value: ProductionRecord[]) {
   try { localStorage.setItem(KEY, JSON.stringify(value)); } catch { /* storage unavailable */ }
+  void createBackendProvider().saveProduction(value).catch(error => console.warn("Central production sync failed", error));
 }
