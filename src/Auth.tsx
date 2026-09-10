@@ -7,30 +7,43 @@ export type AccessRole = "Admin" | "User";
 export type AccessUser = { username: string; displayName: string; role: AccessRole; team?: string };
 const SESSION_KEY = "es-install-session-v1";
 const TEAMS = ["Team Alpha", "Team Bravo", "Team Charlie"];
+const ACCESS_TIMEOUT_MS = 8000;
 
 function saveUser(user: AccessUser) { localStorage.setItem(SESSION_KEY, JSON.stringify(user)); }
 export function getSession(): AccessUser | null { try { const raw = localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) as AccessUser : null; } catch { return null; } }
 export async function signOut() { await supabase.auth.signOut(); localStorage.removeItem(SESSION_KEY); window.location.reload(); }
 
+async function withTimeout<T>(promise: PromiseLike<T>, ms = ACCESS_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error("A validação da sessão demorou demais. Tente entrar novamente.")), ms); }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function profileFor(userId: string, email: string): Promise<AccessUser> {
-  const { data, error } = await supabase.from("profiles").select("display_name,role,team").eq("id", userId).maybeSingle();
+  const { data, error } = await withTimeout(supabase.from("profiles").select("display_name,role,team").eq("id", userId).maybeSingle());
   if (error) throw error;
   if (!data) throw new Error("Usuário autenticado sem perfil. Peça ao administrador para configurar o acesso.");
   return { username: email, displayName: data.display_name, role: data.role, team: data.team || undefined };
 }
 
 export async function authenticate(email: string, secret: string): Promise<AccessUser> {
-  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: secret });
+  const { data, error } = await withTimeout(supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: secret }));
   if (error || !data.user) throw error || new Error("Usuário ou senha inválidos.");
   const user = await profileFor(data.user.id, data.user.email || email);
   saveUser(user); return user;
 }
 
 async function register(email: string, secret: string, displayName: string, team: string): Promise<string> {
-  const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password: secret });
+  const { data, error } = await withTimeout(supabase.auth.signUp({ email: email.trim().toLowerCase(), password: secret }));
   if (error || !data.user) throw error || new Error("Não foi possível criar o usuário.");
   if (!data.session) return "Cadastro criado. Confirme o e-mail e depois faça login.";
-  const { error: profileError } = await supabase.from("profiles").insert({ id: data.user.id, display_name: displayName, role: "User", team });
+  const { error: profileError } = await withTimeout(supabase.from("profiles").insert({ id: data.user.id, display_name: displayName, role: "User", team }));
   if (profileError) throw profileError;
   saveUser({ username: data.user.email || email, displayName, role: "User", team });
   return "Acesso criado com sucesso.";
@@ -61,23 +74,35 @@ export function AccessGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
     const restore = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) { localStorage.removeItem(SESSION_KEY); if (active) { setSession(null); setReady(true); } return; }
       try {
-        const user = await profileFor(data.session.user.id, data.session.user.email || "");
-        saveUser(user);
-        if (active) setSession(user);
-      } catch {
-        await supabase.auth.signOut();
+        const { data, error } = await withTimeout(supabase.auth.getSession());
+        if (error) throw error;
+        if (!data.session) {
+          localStorage.removeItem(SESSION_KEY);
+          if (active) setSession(null);
+          return;
+        }
+        try {
+          const user = await profileFor(data.session.user.id, data.session.user.email || "");
+          saveUser(user);
+          if (active) setSession(user);
+        } catch {
+          await withTimeout(supabase.auth.signOut(), 4000).catch(() => undefined);
+          localStorage.removeItem(SESSION_KEY);
+          if (active) setSession(null);
+        }
+      } catch (error) {
         localStorage.removeItem(SESSION_KEY);
         if (active) setSession(null);
+        console.warn("ES INSTALL access validation failed; showing sign-in.", error);
+      } finally {
+        if (active) setReady(true);
       }
-      if (active) setReady(true);
     };
     void restore();
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, authSession) => {
       if (!authSession) { setSession(null); localStorage.removeItem(SESSION_KEY); return; }
-      try { const user = await profileFor(authSession.user.id, authSession.user.email || ""); saveUser(user); setSession(user); } catch { await supabase.auth.signOut(); }
+      try { const user = await profileFor(authSession.user.id, authSession.user.email || ""); saveUser(user); setSession(user); } catch { await withTimeout(supabase.auth.signOut(), 4000).catch(() => undefined); }
     });
     return () => { active = false; listener.subscription.unsubscribe(); };
   }, []);
