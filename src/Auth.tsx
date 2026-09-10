@@ -57,10 +57,32 @@ export function LoginScreen() {
 }
 
 export function AccessGate({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(false); const [session, setSession] = useState<AccessUser | null>(() => getSession());
-  useEffect(() => { supabase.auth.getSession().then(async ({ data }) => { if (data.session && !getSession()) { try { const user = await profileFor(data.session.user.id, data.session.user.email || ""); setSession(user); saveUser(user); } catch { await supabase.auth.signOut(); } } setReady(true); }); const { data: listener } = supabase.auth.onAuthStateChange((_event, authSession) => { if (!authSession) { setSession(null); localStorage.removeItem(SESSION_KEY); } }); return () => listener.subscription.unsubscribe(); }, []);
+  const [ready, setReady] = useState(false); const [session, setSession] = useState<AccessUser | null>(null);
+  useEffect(() => {
+    let active = true;
+    const restore = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) { localStorage.removeItem(SESSION_KEY); if (active) { setSession(null); setReady(true); } return; }
+      try {
+        const user = await profileFor(data.session.user.id, data.session.user.email || "");
+        saveUser(user);
+        if (active) setSession(user);
+      } catch {
+        await supabase.auth.signOut();
+        localStorage.removeItem(SESSION_KEY);
+        if (active) setSession(null);
+      }
+      if (active) setReady(true);
+    };
+    void restore();
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, authSession) => {
+      if (!authSession) { setSession(null); localStorage.removeItem(SESSION_KEY); return; }
+      try { const user = await profileFor(authSession.user.id, authSession.user.email || ""); saveUser(user); setSession(user); } catch { await supabase.auth.signOut(); }
+    });
+    return () => { active = false; listener.subscription.unsubscribe(); };
+  }, []);
   const stableSession = useMemo(() => session, [session]);
-  if (!ready) return null;
+  if (!ready) return <div className="auth-shell"><div className="auth-card"><span className="gold-label">ES INSTALL</span><h1>Verificando acesso…</h1><p className="muted">Validando a sessão central.</p></div></div>;
   if (!stableSession) return <LoginScreen />;
   return <>{children}<div className="session-badge"><span>{stableSession.displayName} · {stableSession.role}{stableSession.team ? ` · ${stableSession.team}` : ""}</span><button onClick={() => signOut()}>Sair</button></div></>;
 }
