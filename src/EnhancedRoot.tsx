@@ -52,7 +52,26 @@ export default function EnhancedRoot() {
     const production = loadProduction(); if (!production.some(item => item.jobId === job.id)) { const record: ProductionRecord = { jobId: job.id, material: "Granite", slabCount: 0, squareFeet: 0, sinkType: "None", caulkTubes: 0, clips: 0, status: "Pending", updatedAt: new Date().toISOString(), notes: "New job created from Jobs." }; saveProduction([...production, record]); }
     setShowNewJob(false); window.location.reload();
   };
-  const createWarranty = (value: WarrantyCase) => { const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []); write("es-install-warranty-v1", warranties.some(item => item.jobId === value.jobId) ? warranties.map(item => item.jobId === value.jobId ? value : item) : [...warranties, value]); const jobs = read<Job[]>("es-install-jobs-v1", seedJobs); const job = jobs.find(item => item.id === value.jobId); if (job && value.status !== "Resolved" && job.status === "Completed") write("es-install-jobs-v1", jobs.map(item => item.id === job.id ? { ...item, status: "Warranty" } : item)); setShowNewWarranty(false); window.location.reload(); };
+  const createWarranty = async (value: WarrantyCase) => {
+    const backend = createBackendProvider();
+    const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
+    const nextWarranties = warranties.some(item => item.jobId === value.jobId) ? warranties.map(item => item.jobId === value.jobId ? value : item) : [...warranties, value];
+    try {
+      await backend.saveWarranties(nextWarranties);
+      write("es-install-warranty-v1", nextWarranties);
+      const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
+      const job = jobs.find(item => item.id === value.jobId);
+      if (job && value.status !== "Resolved" && job.status === "Completed") {
+        const nextJobs = jobs.map(item => item.id === job.id ? { ...item, status: "Warranty" as const } : item);
+        await backend.saveJobs(nextJobs);
+        write("es-install-jobs-v1", nextJobs);
+      }
+      setShowNewWarranty(false); window.location.reload();
+    } catch (error) {
+      console.error("Central warranty save failed", error);
+      window.alert("Não foi possível salvar a garantia no servidor central. Tente novamente.");
+    }
+  };
   const warrantyJobs = (() => { const jobs = read<Job[]>("es-install-jobs-v1", seedJobs); const installations = read<Installation[]>("es-install-installations-v1", []); const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []); return jobs.filter(job => installations.some(item => item.jobId === job.id && item.status === "Completed") || job.status === "Warranty" || warranties.some(item => item.jobId === job.id)); })();
 
   if (!booted) return <div className="auth-shell"><div className="auth-card"><span className="gold-label">ES INSTALL</span><h1>Conectando…</h1><p className="muted">Sincronizando os dados centrais com o dispositivo.</p></div></div>;
