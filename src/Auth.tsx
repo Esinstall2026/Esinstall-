@@ -100,9 +100,22 @@ export function AccessGate({ children }: { children: ReactNode }) {
       }
     };
     void restore();
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, authSession) => {
-      if (!authSession) { setSession(null); localStorage.removeItem(SESSION_KEY); return; }
-      try { const user = await profileFor(authSession.user.id, authSession.user.email || ""); saveUser(user); setSession(user); } catch { await withTimeout(supabase.auth.signOut(), 4000).catch(() => undefined); }
+
+    // Supabase can hold an internal auth lock while INITIAL_SESSION is emitted.
+    // Never perform another Supabase request directly inside this callback.
+    const { data: listener } = supabase.auth.onAuthStateChange((event, authSession) => {
+      if (!authSession) {
+        setSession(null);
+        localStorage.removeItem(SESSION_KEY);
+        return;
+      }
+      if (event === "INITIAL_SESSION") return;
+      window.setTimeout(() => {
+        if (!active) return;
+        void profileFor(authSession.user.id, authSession.user.email || "")
+          .then(user => { if (active) { saveUser(user); setSession(user); } })
+          .catch(error => console.warn("ES INSTALL profile refresh failed.", error));
+      }, 0);
     });
     return () => { active = false; listener.subscription.unsubscribe(); };
   }, []);
