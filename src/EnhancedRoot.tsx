@@ -11,12 +11,8 @@ import { hydratePilotData } from "./backendSync";
 
 type Installation = { jobId: string; team: string; date: string; time: string; status: "Scheduled" | "In Progress" | "Completed"; notes: string };
 
-function read<T>(key: string, fallback: T): T {
-  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; }
-}
-function write<T>(key: string, value: T) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ }
-}
+function read<T>(key: string, fallback: T): T { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; } }
+function write<T>(key: string, value: T) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
 
 export default function EnhancedRoot() {
   const [booted, setBooted] = useState(false);
@@ -30,69 +26,54 @@ export default function EnhancedRoot() {
     if (!booted) return;
     const backend = createBackendProvider();
     const originalSetItem = localStorage.setItem.bind(localStorage);
-    const sync = (key: string, raw: string) => {
-      try {
-        const value = JSON.parse(raw);
-        if (key === "es-install-jobs-v1") void backend.saveJobs(value as Job[]).catch(error => console.warn("Central jobs sync failed", error));
-        if (key === "es-install-installations-v1") void backend.saveInstallations(value as Installation[]).catch(error => console.warn("Central installations sync failed", error));
-        if (key === "es-install-warranty-v1") void backend.saveWarranties(value as WarrantyCase[]).catch(error => console.warn("Central warranty sync failed", error));
-        if (key === "es-install-production-v1") void backend.saveProduction(value as ProductionRecord[]).catch(error => console.warn("Central production sync failed", error));
-      } catch { /* ignore non-JSON values */ }
-    };
+    const sync = (key: string, raw: string) => { try { const value = JSON.parse(raw); if (key === "es-install-jobs-v1") void backend.saveJobs(value as Job[]).catch(e => console.warn("Central jobs sync failed", e)); if (key === "es-install-installations-v1") void backend.saveInstallations(value as Installation[]).catch(e => console.warn("Central installations sync failed", e)); if (key === "es-install-warranty-v1") void backend.saveWarranties(value as WarrantyCase[]).catch(e => console.warn("Central warranty sync failed", e)); if (key === "es-install-production-v1") void backend.saveProduction(value as ProductionRecord[]).catch(e => console.warn("Central production sync failed", e)); } catch {} };
     localStorage.setItem = ((key: string, value: string) => { originalSetItem(key, value); sync(key, value); }) as typeof localStorage.setItem;
     return () => { localStorage.setItem = originalSetItem as typeof localStorage.setItem; };
   }, [booted]);
 
   useEffect(() => {
     if (!booted) return;
-
-    const getButton = (event: Event) => {
-      const target = event.target as HTMLElement | null;
-      const button = target?.closest("button") as HTMLButtonElement | null;
-      if (!button) return null;
+    const openFromButton = (button: HTMLButtonElement) => {
       const label = button.textContent?.replace(/\s+/g, " ").trim() ?? "";
-      return { button, label };
-    };
-
-    const openNewWarranty = (event: Event) => {
-      const found = getButton(event);
-      if (!found) return;
-      const { label } = found;
-
-      if (label.includes("New Job")) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        setShowNewJob(true);
-        return;
-      }
-
-      if (!label.includes("New Warranty")) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-
+      if (!label.includes("New Warranty")) return false;
       const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
       const installations = read<Installation[]>("es-install-installations-v1", []);
       const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
-      const eligible = jobs.filter(job =>
-        installations.some(item => item.jobId === job.id && item.status === "Completed") ||
-        job.status === "Warranty" ||
-        warranties.some(item => item.jobId === job.id)
-      );
+      const eligible = jobs.filter(job => installations.some(item => item.jobId === job.id && item.status === "Completed") || job.status === "Warranty" || warranties.some(item => item.jobId === job.id));
       const selectable = eligible.length ? eligible : jobs;
       setWarrantyJobId(selectable[0]?.id ?? "");
       setShowNewWarranty(true);
+      return true;
     };
-
-    // Capture pointerdown first so the WarrantyPage's own onClick cannot create a case immediately.
-    document.addEventListener("pointerdown", openNewWarranty, true);
-    document.addEventListener("click", openNewWarranty, true);
-    return () => {
-      document.removeEventListener("pointerdown", openNewWarranty, true);
-      document.removeEventListener("click", openNewWarranty, true);
+    const handleCapture = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest("button") as HTMLButtonElement | null;
+      if (!button) return;
+      const label = button.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      if (!label.includes("New Warranty") && !label.includes("New Job")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      if (label.includes("New Warranty")) openFromButton(button); else setShowNewJob(true);
     };
+    document.addEventListener("click", handleCapture, true);
+    document.addEventListener("pointerup", handleCapture, true);
+    const observer = new MutationObserver(() => {
+      document.querySelectorAll("button").forEach(node => {
+        const button = node as HTMLButtonElement;
+        const label = button.textContent?.replace(/\s+/g, " ").trim() ?? "";
+        if (!label.includes("New Warranty") || button.dataset.esWarrantyBound === "1") return;
+        button.dataset.esWarrantyBound = "1";
+        button.addEventListener("click", event => {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          openFromButton(button);
+        }, true);
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => { document.removeEventListener("click", handleCapture, true); document.removeEventListener("pointerup", handleCapture, true); observer.disconnect(); document.querySelectorAll("button[data-es-warranty-bound=\"1\"]").forEach(node => { delete (node as HTMLButtonElement).dataset.esWarrantyBound; }); };
   }, [booted]);
 
   const createJob = (job: Job) => {
@@ -103,8 +84,7 @@ export default function EnhancedRoot() {
     if (!installations.some(item => item.jobId === job.id)) write("es-install-installations-v1", [...installations, { jobId: job.id, team: job.team, date: job.date, time: "8:00 AM", status: "Scheduled", notes: "" }]);
     const production = loadProduction();
     if (!production.some(item => item.jobId === job.id)) saveProduction([...production, { jobId: job.id, material: "Granite", slabCount: 0, squareFeet: 0, sinkType: "None", caulkTubes: 0, clips: 0, status: "Pending", updatedAt: new Date().toISOString(), notes: "New job created from Jobs." }]);
-    setShowNewJob(false);
-    window.location.reload();
+    setShowNewJob(false); window.location.reload();
   };
 
   const createWarranty = async (value: WarrantyCase) => {
@@ -120,23 +100,11 @@ export default function EnhancedRoot() {
       write("es-install-warranty-v1", nextWarranties);
       if (nextJob) write("es-install-jobs-v1", jobs.map(item => item.id === nextJob.id ? nextJob : item));
       setShowNewWarranty(false);
-      window.setTimeout(() => {
-        const warrantyButton = Array.from(document.querySelectorAll("button.nav-item")).find(button => button.textContent?.trim().endsWith("Warranty")) as HTMLButtonElement | undefined;
-        warrantyButton?.click();
-      }, 50);
-    } catch (error) {
-      console.error("Central warranty save failed", error);
-      window.alert(`Não foi possível salvar a garantia no servidor central. ${error instanceof Error ? error.message : "Tente novamente."}`);
-    }
+      window.setTimeout(() => { const warrantyButton = Array.from(document.querySelectorAll("button.nav-item")).find(button => button.textContent?.trim().endsWith("Warranty")) as HTMLButtonElement | undefined; warrantyButton?.click(); }, 50);
+    } catch (error) { console.error("Central warranty save failed", error); window.alert(`Não foi possível salvar a garantia no servidor central. ${error instanceof Error ? error.message : "Tente novamente."}`); }
   };
 
-  const warrantyJobs = (() => {
-    const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
-    const installations = read<Installation[]>("es-install-installations-v1", []);
-    const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
-    const eligible = jobs.filter(job => installations.some(item => item.jobId === job.id && item.status === "Completed") || job.status === "Warranty" || warranties.some(item => item.jobId === job.id));
-    return eligible.length ? eligible : jobs;
-  })();
+  const warrantyJobs = (() => { const jobs = read<Job[]>("es-install-jobs-v1", seedJobs); const installations = read<Installation[]>("es-install-installations-v1", []); const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []); const eligible = jobs.filter(job => installations.some(item => item.jobId === job.id && item.status === "Completed") || job.status === "Warranty" || warranties.some(item => item.jobId === job.id)); return eligible.length ? eligible : jobs; })();
 
   if (!booted) return <div className="auth-shell"><div className="auth-card"><span className="gold-label">ES INSTALL</span><h1>Conectando…</h1><p className="muted">Sincronizando os dados centrais com o dispositivo.</p></div></div>;
 
