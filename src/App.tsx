@@ -1,6 +1,7 @@
 import { ChangeEvent, useMemo, useState } from "react";
 import { builders, communities, jobs as seedJobs, teams } from "./data";
 import { loadProduction, saveProduction } from "./production";
+import { createBackendProvider } from "./backend";
 import { BuildersModule, CommunitiesModule, ReportsModule, SettingsModule, TeamsModule } from "./AdminModules";
 import type { Job, JobStatus, Page, ProductionRecord, ProductionStatus } from "./types";
 
@@ -42,21 +43,41 @@ export default function App() {
   const selectedJob = jobs.find(j => j.id === selectedJobId) ?? null;
 
   const openJob = (job: Job) => { setSelectedJobId(job.id); setPage("Job Folder"); };
-  const updateJob = (job: Job) => { const next = jobs.map(j => j.id === job.id ? job : j); setJobs(next); write("es-install-jobs-v1", next); };
-  const updateInstallation = (value: Installation) => {
+  const updateJob = async (job: Job) => {
+    const next = jobs.map(j => j.id === job.id ? job : j);
+    try { await createBackendProvider().saveJobs([job]); } catch (error) { console.warn("Central job sync failed", error); }
+    setJobs(next); write("es-install-jobs-v1", next);
+  };
+  const updateInstallation = async (value: Installation) => {
     const next = installations.some(i => i.jobId === value.jobId) ? installations.map(i => i.jobId === value.jobId ? value : i) : [...installations, value];
-    setInstallations(next); write("es-install-installations-v1", next);
     const job = jobs.find(j => j.id === value.jobId);
-    if (job) {
-      const nextStatus: JobStatus = value.status === "Completed" ? "Completed" : value.status === "In Progress" ? "Installation" : job.status === "Completed" || job.status === "Warranty" ? job.status : "Ready for Installation";
-      if (job.status !== nextStatus) updateJob({ ...job, status: nextStatus });
+    const nextStatus: JobStatus | null = job ? value.status === "Completed" ? "Completed" : value.status === "In Progress" ? "Installation" : job.status === "Completed" || job.status === "Warranty" ? job.status : "Ready for Installation" : null;
+    const updatedJob = job && nextStatus && job.status !== nextStatus ? { ...job, status: nextStatus } : null;
+    try {
+      const backend = createBackendProvider();
+      await backend.saveInstallations([value]);
+      if (updatedJob) await backend.saveJobs([updatedJob]);
+      setInstallations(next); write("es-install-installations-v1", next);
+      if (updatedJob) { setJobs(jobs.map(j => j.id === updatedJob.id ? updatedJob : j)); write("es-install-jobs-v1", jobs.map(j => j.id === updatedJob.id ? updatedJob : j)); }
+    } catch (error) {
+      console.error("Central installation sync failed", error);
+      alert(`Não foi possível salvar a instalação no servidor central. ${error instanceof Error ? error.message : "Tente novamente."}`);
     }
   };
-  const updateWarranty = (value: WarrantyCase) => {
+  const updateWarranty = async (value: WarrantyCase) => {
     const next = warranties.some(w => w.jobId === value.jobId) ? warranties.map(w => w.jobId === value.jobId ? value : w) : [...warranties, value];
-    setWarranties(next); write("es-install-warranty-v1", next);
     const job = jobs.find(j => j.id === value.jobId);
-    if (job && value.status !== "Resolved" && job.status === "Completed") updateJob({ ...job, status: "Warranty" });
+    const updatedJob = job && value.status !== "Resolved" && job.status === "Completed" ? { ...job, status: "Warranty" as JobStatus } : null;
+    try {
+      const backend = createBackendProvider();
+      await backend.saveWarranties([value]);
+      if (updatedJob) await backend.saveJobs([updatedJob]);
+      setWarranties(next); write("es-install-warranty-v1", next);
+      if (updatedJob) { setJobs(jobs.map(j => j.id === updatedJob.id ? updatedJob : j)); write("es-install-jobs-v1", jobs.map(j => j.id === updatedJob.id ? updatedJob : j)); }
+    } catch (error) {
+      console.error("Central warranty sync failed", error);
+      alert(`Não foi possível salvar a garantia no servidor central. ${error instanceof Error ? error.message : "Tente novamente."}`);
+    }
   };
   const updateProduction = (value: ProductionRecord) => {
     const next = production.some(p => p.jobId === value.jobId) ? production.map(p => p.jobId === value.jobId ? value : p) : [...production, value];
