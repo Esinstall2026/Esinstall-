@@ -75,12 +75,12 @@ export default function EnhancedRoot() {
       write("es-install-warranty-v1", nextWarranties);
       if (nextJob) write("es-install-jobs-v1", jobs.map(item => item.id === nextJob.id ? nextJob : item));
       setShowNewWarranty(false);
-      // Do not reload back to Dashboard. Open the Warranty module so the newly
-      // created case is immediately visible to the user.
+      // App's Warranty nav button includes the icon in its text content (e.g. "◇Warranty"),
+      // so match by suffix instead of requiring an exact textContent of "Warranty".
       window.setTimeout(() => {
-        const warrantyButton = Array.from(document.querySelectorAll("button")).find(button => button.textContent?.trim() === "Warranty") as HTMLButtonElement | undefined;
+        const warrantyButton = Array.from(document.querySelectorAll("button")).find(button => button.textContent?.trim().endsWith("Warranty")) as HTMLButtonElement | undefined;
         warrantyButton?.click();
-      }, 0);
+      }, 50);
     } catch (error) {
       console.error("Central warranty save failed", error);
       window.alert(`Não foi possível salvar a garantia no servidor central. ${error instanceof Error ? error.message : "Tente novamente."}`);
