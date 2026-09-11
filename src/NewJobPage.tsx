@@ -11,23 +11,19 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
 
   const createJob = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
-    // Keep the fields uncontrolled. Safari/iPhone can restore or autofill
-    // native form values without updating React state; FormData reads the
-    // actual values that the browser is displaying.
-    const data = new FormData(event.currentTarget);
-    const getValue = (name: string, fallback = "") => {
-      const value = data.get(name);
-      return typeof value === "string" && value.trim() ? value.trim() : fallback;
+    const readInput = (id: string, fallback = "") => {
+      const element = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+      const value = element?.value ?? "";
+      return value.trim() || fallback;
     };
 
-    const normalizedId = getValue("jobId").toUpperCase();
-    const normalizedAddress = getValue("address");
-    const selectedBuilder = getValue("builder", builders[0] ?? "");
-    const selectedCommunity = getValue("community", communities[0] ?? "");
-    const selectedTeam = getValue("team", teams[0] ?? "");
-    const selectedDate = getValue("date", todayDate());
-    const selectedStatus = getValue("status", "Scheduled") as JobStatus;
+    const normalizedId = readInput("new-job-id").toUpperCase();
+    const normalizedAddress = readInput("new-job-address");
+    const selectedBuilder = readInput("new-job-builder", builders[0] ?? "");
+    const selectedCommunity = readInput("new-job-community", communities[0] ?? "");
+    const selectedTeam = readInput("new-job-team", teams[0] ?? "");
+    const selectedDate = readInput("new-job-date", todayDate());
+    const selectedStatus = readInput("new-job-status", "Scheduled") as JobStatus;
 
     if (!normalizedId || !normalizedAddress) {
       setError("Job ID and address are required.");
@@ -35,15 +31,7 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
     }
 
     setError("");
-    onCreate({
-      id: normalizedId,
-      address: normalizedAddress,
-      builder: selectedBuilder,
-      community: selectedCommunity,
-      team: selectedTeam,
-      date: selectedDate,
-      status: selectedStatus
-    });
+    onCreate({ id: normalizedId, address: normalizedAddress, builder: selectedBuilder, community: selectedCommunity, team: selectedTeam, date: selectedDate, status: selectedStatus });
   };
 
   return <div className="content">
@@ -52,13 +40,13 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
     </section>
     <form className="panel" aria-label="New Job form" onSubmit={createJob}>
       <div className="form-grid">
-        <label className="field"><span>Job ID</span><input name="jobId" defaultValue="" placeholder="JOB-1006" autoFocus autoComplete="off" /></label>
-        <label className="field"><span>Address</span><input name="address" defaultValue="" placeholder="123 Main St" autoComplete="street-address" /></label>
-        <label className="field"><span>Builder</span><select name="builder" defaultValue={builders[0] ?? ""}>{builders.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
-        <label className="field"><span>Community</span><select name="community" defaultValue={communities[0] ?? ""}>{communities.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
-        <label className="field"><span>Team</span><select name="team" defaultValue={teams[0] ?? ""}>{teams.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
-        <label className="field"><span>Installation Date</span><input name="date" type="date" defaultValue={todayDate()} /></label>
-        <label className="field"><span>Initial Status</span><select name="status" defaultValue="Scheduled">{statuses.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
+        <label className="field"><span>Job ID</span><input id="new-job-id" name="jobId" defaultValue="" placeholder="JOB-1006" autoFocus autoComplete="off" /></label>
+        <label className="field"><span>Address</span><input id="new-job-address" name="address" defaultValue="" placeholder="123 Main St" autoComplete="street-address" /></label>
+        <label className="field"><span>Builder</span><select id="new-job-builder" name="builder" defaultValue={builders[0] ?? ""}>{builders.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
+        <label className="field"><span>Community</span><select id="new-job-community" name="community" defaultValue={communities[0] ?? ""}>{communities.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
+        <label className="field"><span>Team</span><select id="new-job-team" name="team" defaultValue={teams[0] ?? ""}>{teams.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
+        <label className="field"><span>Installation Date</span><input id="new-job-date" name="date" type="date" defaultValue={todayDate()} /></label>
+        <label className="field"><span>Initial Status</span><select id="new-job-status" name="status" defaultValue="Scheduled">{statuses.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
       </div>
       {error && <p className="muted" style={{marginTop:12}}>{error}</p>}
       <div className="button-group" style={{marginTop:16}}>
