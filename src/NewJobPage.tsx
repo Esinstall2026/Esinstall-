@@ -17,13 +17,23 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
   const [status, setStatus] = useState<JobStatus>("Scheduled");
 
   const createJob = () => {
-    // Controlled values are the single source of truth. This prevents Safari's
-    // visual autofill/restoration layer from being mistaken for form data.
-    const normalizedId = jobId.trim().toUpperCase();
-    const normalizedAddress = address.trim();
+    // Safari can restore an input's visible DOM value without firing React's
+    // change event. Read the live controls first, then fall back to React state.
+    const readDom = (id: string) => {
+      const element = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+      return element?.value?.trim() ?? "";
+    };
+
+    const normalizedId = (readDom("new-job-id") || jobId).trim().toUpperCase();
+    const normalizedAddress = (readDom("new-job-address") || address).trim();
+    const selectedBuilder = readDom("new-job-builder") || builder;
+    const selectedCommunity = readDom("new-job-community") || community;
+    const selectedTeam = readDom("new-job-team") || team;
+    const selectedDate = readDom("new-job-date") || date || todayDate();
+    const selectedStatus = (readDom("new-job-status") || status || "Scheduled") as JobStatus;
 
     if (!normalizedId || !normalizedAddress) {
-      setError("Job ID and Address are required.");
+      setError("Please enter the Job ID and Address, then tap Create Job again.");
       return;
     }
 
@@ -31,11 +41,11 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
     onCreate({
       id: normalizedId,
       address: normalizedAddress,
-      builder,
-      community,
-      team,
-      date: date || todayDate(),
-      status,
+      builder: selectedBuilder,
+      community: selectedCommunity,
+      team: selectedTeam,
+      date: selectedDate,
+      status: selectedStatus,
     });
   };
 
@@ -49,7 +59,7 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
         <label className="field"><span>Address</span><input id="new-job-address" name="address" value={address} onChange={e => setAddress(e.target.value)} placeholder="123 Main St" autoComplete="off" /></label>
         <label className="field"><span>Builder</span><select id="new-job-builder" name="builder" value={builder} onChange={e => setBuilder(e.target.value)}>{builders.map(v => <option key={v} value={v}>{v}</option>)}</select></label>
         <label className="field"><span>Community</span><select id="new-job-community" name="community" value={community} onChange={e => setCommunity(e.target.value)}>{communities.map(v => <option key={v} value={v}>{v}</option>)}</select></label>
-        <label className="field"><span>Team</span><select id="new-job-team" name="team" value={team} onChange={e => setTeam(e.target.value)}>{teams.map(v => <option key={v} value={v}>{v}</option>)}</select></label>
+        <label className="field"><span>Team</span><select id="new-job-team" name="team" value={team} onChange={e => setTeam(e.target.value)}>{teams.map(v => <option key={v}>{v}</option>)}</select></label>
         <label className="field"><span>Installation Date</span><input id="new-job-date" name="date" type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
         <label className="field"><span>Initial Status</span><select id="new-job-status" name="status" value={status} onChange={e => setStatus(e.target.value as JobStatus)}>{statuses.map(v => <option key={v} value={v}>{v}</option>)}</select></label>
       </div>
