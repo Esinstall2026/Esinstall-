@@ -48,44 +48,6 @@ export default function EnhancedRoot() {
       if (!button) return;
       const label = button.textContent?.replace(/\s+/g, " ").trim() ?? "";
 
-      // Mobile/Safari-safe fallback: read the actual visible form controls
-      // directly and create the Job without depending on React input state.
-      if (label === "Create Job") {
-        const dialog = button.closest('[role="dialog"]') as HTMLElement | null;
-        const root = dialog ?? button.closest(".panel")?.parentElement ?? document;
-        const getValue = (name: string) => (root.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLSelectElement | null)?.value?.trim() ?? "";
-        const id = getValue("jobId").toUpperCase();
-        const address = getValue("address");
-        const builder = getValue("builder") || "";
-        const community = getValue("community") || "";
-        const team = getValue("team") || "";
-        const date = getValue("date") || new Date().toISOString().slice(0, 10);
-        const status = getValue("status") || "Scheduled";
-
-        if (id && address) {
-          event.preventDefault();
-          event.stopPropagation();
-          const currentJobs = read<Job[]>("es-install-jobs-v1", seedJobs);
-          const nextJobs = currentJobs.some(item => item.id.toUpperCase() === id)
-            ? currentJobs.map(item => item.id.toUpperCase() === id ? { ...item, address, builder, community, team, date, status: status as Job["status"] } : item)
-            : [...currentJobs, { id, address, builder, community, team, date, status: status as Job["status"] }];
-          write("es-install-jobs-v1", nextJobs);
-
-          const currentInstallations = read<Installation[]>("es-install-installations-v1", seedJobs.map((item, index) => ({ jobId: item.id, team: item.team, date: item.date, time: index % 2 ? "10:00 AM" : "8:00 AM", status: item.status === "Installation" ? "In Progress" : "Scheduled", notes: "" })));
-          if (!currentInstallations.some(item => item.jobId === id)) {
-            write("es-install-installations-v1", [...currentInstallations, { jobId: id, team, date, time: "8:00 AM", status: "Scheduled", notes: "" }]);
-          }
-
-          const currentProduction = loadProduction();
-          if (!currentProduction.some(item => item.jobId === id)) {
-            saveProduction([...currentProduction, { jobId: id, material: "Granite", slabCount: 0, squareFeet: 0, sinkType: "None", caulkTubes: 0, clips: 0, status: "Pending", updatedAt: new Date().toISOString(), notes: "New job created from Jobs." }]);
-          }
-          setShowNewJob(false);
-          window.location.reload();
-          return;
-        }
-      }
-
       if (label === "+ New Job") {
         event.preventDefault();
         event.stopPropagation();
