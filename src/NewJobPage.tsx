@@ -4,6 +4,7 @@ import type { Job, JobStatus } from "./types";
 
 type Props = { onCreate: (job: Job) => void; onCancel: () => void };
 const statuses: JobStatus[] = ["Scheduled", "Production", "Ready for Installation", "Installation", "Completed", "Warranty"];
+const todayDate = () => new Date().toISOString().slice(0, 10);
 
 export default function NewJobPage({ onCreate, onCancel }: Props) {
   const [id, setId] = useState("");
@@ -11,18 +12,21 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
   const [builder, setBuilder] = useState(builders[0] ?? "");
   const [community, setCommunity] = useState(communities[0] ?? "");
   const [team, setTeam] = useState(teams[0] ?? "");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayDate());
   const [status, setStatus] = useState<JobStatus>("Scheduled");
   const [error, setError] = useState("");
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const normalizedId = id.trim().toUpperCase();
-    if (!normalizedId || !address.trim() || !date) {
-      setError("Job ID, address and date are required.");
+    const normalizedAddress = address.trim();
+    const normalizedDate = date || todayDate();
+    if (!normalizedId || !normalizedAddress) {
+      setError("Job ID and address are required.");
       return;
     }
-    onCreate({ id: normalizedId, address: address.trim(), builder, community, team, date, status });
+    setError("");
+    onCreate({ id: normalizedId, address: normalizedAddress, builder, community, team, date: normalizedDate, status });
   };
 
   return <div className="content">
