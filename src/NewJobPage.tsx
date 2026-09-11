@@ -17,8 +17,21 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
   const [status, setStatus] = useState<JobStatus>("Scheduled");
 
   const createJob = () => {
-    const normalizedId = jobId.trim().toUpperCase();
-    const normalizedAddress = address.trim();
+    // iOS Safari can restore form values visually without firing React onChange.
+    // Read the live controls at submit time so the values the user sees are used.
+    const readValue = (id: string, stateValue: string) => {
+      const element = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+      const domValue = element?.value?.trim() ?? "";
+      return domValue || stateValue.trim();
+    };
+
+    const normalizedId = readValue("job-create-v2-id", jobId).toUpperCase();
+    const normalizedAddress = readValue("job-create-v2-address", address);
+    const selectedBuilder = readValue("job-create-v2-builder", builder);
+    const selectedCommunity = readValue("job-create-v2-community", community);
+    const selectedTeam = readValue("job-create-v2-team", team);
+    const selectedDate = readValue("job-create-v2-date", date) || todayDate();
+    const selectedStatus = readValue("job-create-v2-status", status) as JobStatus;
 
     if (!normalizedId || !normalizedAddress) {
       setError("Please enter the Job ID and Address, then tap Create Job again.");
@@ -29,11 +42,11 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
     onCreate({
       id: normalizedId,
       address: normalizedAddress,
-      builder,
-      community,
-      team,
-      date: date || todayDate(),
-      status,
+      builder: selectedBuilder,
+      community: selectedCommunity,
+      team: selectedTeam,
+      date: selectedDate,
+      status: selectedStatus,
     });
   };
 
@@ -43,7 +56,7 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
     </section>
     <div className="panel" aria-label="New Job form" key="new-job-form-v2">
       <div className="form-grid">
-        <label className="field"><span>Job ID</span><input id="job-create-v2-id" name="job-create-v2-id" value={jobId} onChange={e => setJobId(e.target.value)} placeholder="JOB-1006" autoFocus autoComplete="new-password" /></label>
+        <label className="field"><span>Job ID</span><input id="job-create-v2-id" name="job-create-v2-id" value={jobId} onChange={e => setJobId(e.target.value)} placeholder="JOB-1006" autoComplete="new-password" /></label>
         <label className="field"><span>Address</span><input id="job-create-v2-address" name="job-create-v2-address" value={address} onChange={e => setAddress(e.target.value)} placeholder="123 Main St" autoComplete="new-password" /></label>
         <label className="field"><span>Builder</span><select id="job-create-v2-builder" name="job-create-v2-builder" value={builder} onChange={e => setBuilder(e.target.value)}>{builders.map(v => <option key={v} value={v}>{v}</option>)}</select></label>
         <label className="field"><span>Community</span><select id="job-create-v2-community" name="job-create-v2-community" value={community} onChange={e => setCommunity(e.target.value)}>{communities.map(v => <option key={v} value={v}>{v}</option>)}</select></label>
