@@ -16,9 +16,21 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
   const [status, setStatus] = useState<JobStatus>("Scheduled");
   const [error, setError] = useState("");
 
-  const createJob = () => {
-    const normalizedId = jobId.trim().toUpperCase();
-    const normalizedAddress = address.trim();
+  const createJob = (event: React.MouseEvent<HTMLButtonElement>) => {
+    // Read the actual visible controls first. This is intentionally independent
+    // of React state so iPhone/Safari cannot submit stale controlled values.
+    const button = event.currentTarget;
+    const root = button.closest('[role="form"]') as HTMLElement | null;
+    const getValue = (name: string, fallback: string) =>
+      (root?.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLSelectElement | null)?.value?.trim() || fallback;
+
+    const normalizedId = getValue("jobId", jobId).toUpperCase();
+    const normalizedAddress = getValue("address", address);
+    const selectedBuilder = getValue("builder", builder);
+    const selectedCommunity = getValue("community", community);
+    const selectedTeam = getValue("team", team);
+    const selectedDate = getValue("date", date || todayDate());
+    const selectedStatus = getValue("status", status) as JobStatus;
 
     if (!normalizedId || !normalizedAddress) {
       setError("Job ID and address are required.");
@@ -29,11 +41,11 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
     onCreate({
       id: normalizedId,
       address: normalizedAddress,
-      builder,
-      community,
-      team,
-      date: date || todayDate(),
-      status
+      builder: selectedBuilder,
+      community: selectedCommunity,
+      team: selectedTeam,
+      date: selectedDate,
+      status: selectedStatus
     });
   };
 
