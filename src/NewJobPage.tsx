@@ -16,13 +16,17 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
   const [status, setStatus] = useState<JobStatus>("Scheduled");
   const [error, setError] = useState("");
 
-  const createJob = (event: React.MouseEvent<HTMLButtonElement>) => {
-    // Read the actual visible controls first. This is intentionally independent
-    // of React state so iPhone/Safari cannot submit stale controlled values.
-    const button = event.currentTarget;
-    const root = button.closest('[role="form"]') as HTMLElement | null;
-    const getValue = (name: string, fallback: string) =>
-      (root?.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLSelectElement | null)?.value?.trim() || fallback;
+  const createJob = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    // Use the browser's native FormData as the source of truth. This avoids
+    // React controlled-state timing/autofill issues on iPhone/Safari.
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const getValue = (name: string, fallback: string) => {
+      const value = data.get(name);
+      return typeof value === "string" && value.trim() ? value.trim() : fallback;
+    };
 
     const normalizedId = getValue("jobId", jobId).toUpperCase();
     const normalizedAddress = getValue("address", address);
@@ -53,7 +57,7 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
     <section className="page-tools">
       <div><span className="gold-label">JOB MANAGEMENT</span><h2>New Job</h2><p className="muted">Create an operational job and start its production, installation and warranty workflow.</p></div>
     </section>
-    <div className="panel" role="form" aria-label="New Job form">
+    <form className="panel" aria-label="New Job form" onSubmit={createJob}>
       <div className="form-grid">
         <label className="field"><span>Job ID</span><input name="jobId" value={jobId} onChange={e=>setJobId(e.target.value)} placeholder="JOB-1006" autoFocus autoComplete="off" /></label>
         <label className="field"><span>Address</span><input name="address" value={address} onChange={e=>setAddress(e.target.value)} placeholder="123 Main St" autoComplete="street-address" /></label>
@@ -66,8 +70,8 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
       {error && <p className="muted" style={{marginTop:12}}>{error}</p>}
       <div className="button-group" style={{marginTop:16}}>
         <button type="button" className="ghost" onClick={onCancel}>Cancel</button>
-        <button type="button" className="primary" onClick={createJob}>Create Job</button>
+        <button type="submit" className="primary">Create Job</button>
       </div>
-    </div>
+    </form>
   </div>;
 }
