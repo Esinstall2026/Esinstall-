@@ -7,8 +7,6 @@ const statuses: JobStatus[] = ["Scheduled", "Production", "Ready for Installatio
 const todayDate = () => new Date().toISOString().slice(0, 10);
 
 export default function NewJobPage({ onCreate, onCancel }: Props) {
-  const [id, setId] = useState("");
-  const [address, setAddress] = useState("");
   const [builder, setBuilder] = useState(builders[0] ?? "");
   const [community, setCommunity] = useState(communities[0] ?? "");
   const [team, setTeam] = useState(teams[0] ?? "");
@@ -18,14 +16,15 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const normalizedId = String(form.get("jobId") ?? id).trim().toUpperCase();
-    const normalizedAddress = String(form.get("address") ?? address).trim();
-    const normalizedDate = String(form.get("date") ?? date) || todayDate();
-    const selectedBuilder = String(form.get("builder") ?? builder);
-    const selectedCommunity = String(form.get("community") ?? community);
-    const selectedTeam = String(form.get("team") ?? team);
-    const selectedStatus = String(form.get("status") ?? status) as JobStatus;
+    const form = event.currentTarget;
+    const value = (name: string) => (form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | null)?.value ?? "";
+    const normalizedId = value("jobId").trim().toUpperCase();
+    const normalizedAddress = value("address").trim();
+    const normalizedDate = value("date") || todayDate();
+    const selectedBuilder = value("builder") || builder;
+    const selectedCommunity = value("community") || community;
+    const selectedTeam = value("team") || team;
+    const selectedStatus = (value("status") || status) as JobStatus;
 
     if (!normalizedId || !normalizedAddress) {
       setError("Job ID and address are required.");
@@ -41,8 +40,8 @@ export default function NewJobPage({ onCreate, onCancel }: Props) {
     </section>
     <form className="panel" onSubmit={submit} autoComplete="off">
       <div className="form-grid">
-        <label className="field"><span>Job ID</span><input name="jobId" value={id} onChange={e=>setId(e.target.value)} placeholder="JOB-1006" autoFocus autoComplete="off" /></label>
-        <label className="field"><span>Address</span><input name="address" value={address} onChange={e=>setAddress(e.target.value)} placeholder="123 Main St" autoComplete="street-address" /></label>
+        <label className="field"><span>Job ID</span><input name="jobId" defaultValue="" placeholder="JOB-1006" autoFocus autoComplete="off" /></label>
+        <label className="field"><span>Address</span><input name="address" defaultValue="" placeholder="123 Main St" autoComplete="street-address" /></label>
         <label className="field"><span>Builder</span><select name="builder" value={builder} onChange={e=>setBuilder(e.target.value)}>{builders.map(v=><option key={v}>{v}</option>)}</select></label>
         <label className="field"><span>Community</span><select name="community" value={community} onChange={e=>setCommunity(e.target.value)}>{communities.map(v=><option key={v}>{v}</option>)}</select></label>
         <label className="field"><span>Team</span><select name="team" value={team} onChange={e=>setTeam(e.target.value)}>{teams.map(v=><option key={v}>{v}</option>)}</select></label>
