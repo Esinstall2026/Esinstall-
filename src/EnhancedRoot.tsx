@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import App from "./App";
 import NewJobPage from "./NewJobPage";
-import NewWarrantyPage, { type WarrantyCase } from "./NewWarrantyPage";
 import { loadProduction, saveProduction } from "./production";
 import { jobs as seedJobs } from "./data";
 import type { Job, ProductionRecord } from "./types";
@@ -21,8 +20,6 @@ function write<T>(key: string, value: T) {
 export default function EnhancedRoot() {
   const [booted, setBooted] = useState(false);
   const [showNewJob, setShowNewJob] = useState(false);
-  const [showNewWarranty, setShowNewWarranty] = useState(false);
-  const [warrantyJobId, setWarrantyJobId] = useState("");
 
   useEffect(() => { hydratePilotData().finally(() => setBooted(true)); }, []);
 
@@ -35,7 +32,7 @@ export default function EnhancedRoot() {
         const value = JSON.parse(raw);
         if (key === "es-install-jobs-v1") void backend.saveJobs(value as Job[]).catch(error => console.warn("Central jobs sync failed", error));
         if (key === "es-install-installations-v1") void backend.saveInstallations(value as Installation[]).catch(error => console.warn("Central installations sync failed", error));
-        if (key === "es-install-warranty-v1") void backend.saveWarranties(value as WarrantyCase[]).catch(error => console.warn("Central warranty sync failed", error));
+        if (key === "es-install-warranty-v1") void backend.saveWarranties(value).catch(error => console.warn("Central warranty sync failed", error));
         if (key === "es-install-production-v1") void backend.saveProduction(value as ProductionRecord[]).catch(error => console.warn("Central production sync failed", error));
       } catch { /* ignore non-JSON values */ }
     };
@@ -45,37 +42,19 @@ export default function EnhancedRoot() {
 
   useEffect(() => {
     if (!booted) return;
-
-    const prepare = () => {
-      document.querySelectorAll("button").forEach(button => {
-        const label = button.textContent?.replace(/\s+/g, " ").trim() ?? "";
-        if (!label.includes("New Warranty")) return;
-        const element = button as HTMLButtonElement & { __esWarrantyBound?: boolean };
-        if (element.__esWarrantyBound) return;
-        element.__esWarrantyBound = true;
-        element.onclick = (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          event.stopImmediatePropagation();
-          const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
-          const installations = read<Installation[]>("es-install-installations-v1", []);
-          const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
-          const eligible = jobs.filter(job =>
-            installations.some(item => item.jobId === job.id && item.status === "Completed") ||
-            job.status === "Warranty" ||
-            warranties.some(item => item.jobId === job.id)
-          );
-          const selectable = eligible.length ? eligible : jobs;
-          setWarrantyJobId(selectable[0]?.id ?? "");
-          setShowNewWarranty(true);
-        };
-      });
+    const handleGlobalClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest("button");
+      if (!button) return;
+      const label = button.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      if (label === "+ New Job") {
+        event.preventDefault();
+        event.stopPropagation();
+        setShowNewJob(true);
+      }
     };
-
-    prepare();
-    const observer = new MutationObserver(prepare);
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    document.addEventListener("click", handleGlobalClick, true);
+    return () => document.removeEventListener("click", handleGlobalClick, true);
   }, [booted]);
 
   const createJob = (job: Job) => {
@@ -90,43 +69,11 @@ export default function EnhancedRoot() {
     window.location.reload();
   };
 
-  const createWarranty = async (value: WarrantyCase) => {
-    const backend = createBackendProvider();
-    const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
-    const nextWarranties = warranties.some(item => item.jobId === value.jobId) ? warranties.map(item => item.jobId === value.jobId ? value : item) : [...warranties, value];
-    const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
-    const job = jobs.find(item => item.id === value.jobId);
-    const nextJob = job && value.status !== "Resolved" && job.status === "Completed" ? { ...job, status: "Warranty" as const } : null;
-    try {
-      await backend.saveWarranties([value]);
-      if (nextJob) await backend.saveJobs([nextJob]);
-      write("es-install-warranty-v1", nextWarranties);
-      if (nextJob) write("es-install-jobs-v1", jobs.map(item => item.id === nextJob.id ? nextJob : item));
-      setShowNewWarranty(false);
-      window.setTimeout(() => {
-        const warrantyButton = Array.from(document.querySelectorAll("button.nav-item")).find(button => button.textContent?.trim().endsWith("Warranty")) as HTMLButtonElement | undefined;
-        warrantyButton?.click();
-      }, 50);
-    } catch (error) {
-      console.error("Central warranty save failed", error);
-      window.alert(`Não foi possível salvar a garantia no servidor central. ${error instanceof Error ? error.message : "Tente novamente."}`);
-    }
-  };
-
-  const warrantyJobs = (() => {
-    const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
-    const installations = read<Installation[]>("es-install-installations-v1", []);
-    const warranties = read<WarrantyCase[]>("es-install-warranty-v1", []);
-    const eligible = jobs.filter(job => installations.some(item => item.jobId === job.id && item.status === "Completed") || job.status === "Warranty" || warranties.some(item => item.jobId === job.id));
-    return eligible.length ? eligible : jobs;
-  })();
-
   if (!booted) return <div className="auth-shell"><div className="auth-card"><span className="gold-label">ES INSTALL</span><h1>Conectando…</h1><p className="muted">Sincronizando os dados centrais com o dispositivo.</p></div></div>;
 
   return <>
     <App />
     {showNewJob && <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Create new job"><div style={modalStyle}><button className="ghost" style={closeStyle} onClick={() => setShowNewJob(false)}>Close</button><NewJobPage onCreate={createJob} onCancel={() => setShowNewJob(false)} /></div></div>}
-    {showNewWarranty && <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Create new warranty"><div style={modalStyle}><button className="ghost" style={closeStyle} onClick={() => setShowNewWarranty(false)}>Close</button><NewWarrantyPage jobs={warrantyJobs} initialJobId={warrantyJobId} onCreate={createWarranty} onCancel={() => setShowNewWarranty(false)} /></div></div>}
   </>;
 }
 
