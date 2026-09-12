@@ -21,6 +21,7 @@ export default function EnhancedRoot() {
   const [booted, setBooted] = useState(false);
   const [showNewJob, setShowNewJob] = useState(false);
   const [savingJob, setSavingJob] = useState(false);
+  const [appKey, setAppKey] = useState(0);
 
   useEffect(() => { hydratePilotData().finally(() => setBooted(true)); }, []);
 
@@ -78,18 +79,23 @@ export default function EnhancedRoot() {
       : [...production, { jobId: job.id, material: "Granite", slabCount: 0, squareFeet: 0, sinkType: "None", caulkTubes: 0, clips: 0, status: "Pending", updatedAt: new Date().toISOString(), notes: "New job created from Jobs." }];
 
     try {
-      // Persist centrally BEFORE reloading. Hydration on the next boot reads
-      // the central store and would otherwise overwrite the freshly-created job.
-      await backend.saveJobs([job]);
-      await backend.saveInstallations([nextInstallations.find(item => item.jobId === job.id)!]);
-      const newProduction = nextProduction.find(item => item.jobId === job.id);
-      if (newProduction) await backend.saveProduction([newProduction]);
+      // Save the complete collections so every backend implementation keeps
+      // the existing jobs as well as the newly-created job.
+      await backend.saveJobs(nextJobs);
+      await backend.saveInstallations(nextInstallations);
+      await backend.saveProduction(nextProduction);
 
+      // Update the local cache only after central persistence succeeds.
       write("es-install-jobs-v1", nextJobs);
       write("es-install-installations-v1", nextInstallations);
       saveProduction(nextProduction);
+
+      // Do not reload Safari. A full reload can re-hydrate stale central data
+      // or restore old form values. Remount App instead so it reads the cache
+      // containing the new job immediately.
       setShowNewJob(false);
-      window.location.reload();
+      setSavingJob(false);
+      setAppKey(value => value + 1);
     } catch (error) {
       console.error("New Job save failed", error);
       setSavingJob(false);
@@ -100,7 +106,7 @@ export default function EnhancedRoot() {
   if (!booted) return <div className="auth-shell"><div className="auth-card"><span className="gold-label">ES INSTALL</span><h1>Conectando…</h1><p className="muted">Sincronizando os dados centrais com o dispositivo.</p></div></div>;
 
   return <>
-    <App />
+    <App key={appKey} />
     {showNewJob && <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Create new job"><div style={modalStyle}><button className="ghost" style={closeStyle} onClick={() => setShowNewJob(false)} disabled={savingJob}>Close</button><NewJobPage onCreate={createJob} onCancel={() => setShowNewJob(false)} /></div></div>}
   </>;
 }
