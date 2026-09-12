@@ -20,6 +20,7 @@ function write<T>(key: string, value: T) {
 export default function EnhancedRoot() {
   const [booted, setBooted] = useState(false);
   const [showNewJob, setShowNewJob] = useState(false);
+  const [savingJob, setSavingJob] = useState(false);
 
   useEffect(() => { hydratePilotData().finally(() => setBooted(true)); }, []);
 
@@ -47,7 +48,6 @@ export default function EnhancedRoot() {
       const button = target?.closest("button");
       if (!button) return;
       const label = button.textContent?.replace(/\s+/g, " ").trim() ?? "";
-
       if (label === "+ New Job") {
         event.preventDefault();
         event.stopPropagation();
@@ -58,25 +58,50 @@ export default function EnhancedRoot() {
     return () => document.removeEventListener("click", handleGlobalClick, true);
   }, [booted]);
 
-  const createJob = (job: Job) => {
+  const createJob = async (job: Job) => {
+    if (savingJob) return;
+    setSavingJob(true);
+    const backend = createBackendProvider();
     const jobs = read<Job[]>("es-install-jobs-v1", seedJobs);
     const nextJobs = jobs.some(item => item.id.toUpperCase() === job.id.toUpperCase())
       ? jobs.map(item => item.id.toUpperCase() === job.id.toUpperCase() ? job : item)
       : [...jobs, job];
-    write("es-install-jobs-v1", nextJobs);
+
     const installations = read<Installation[]>("es-install-installations-v1", seedJobs.map((item, index) => ({ jobId: item.id, team: item.team, date: item.date, time: index % 2 ? "10:00 AM" : "8:00 AM", status: item.status === "Installation" ? "In Progress" : "Scheduled", notes: "" })));
-    if (!installations.some(item => item.jobId === job.id)) write("es-install-installations-v1", [...installations, { jobId: job.id, team: job.team, date: job.date, time: "8:00 AM", status: "Scheduled", notes: "" }]);
+    const nextInstallations = installations.some(item => item.jobId === job.id)
+      ? installations.map(item => item.jobId === job.id ? { ...item, team: job.team, date: job.date } : item)
+      : [...installations, { jobId: job.id, team: job.team, date: job.date, time: "8:00 AM", status: "Scheduled", notes: "" }];
+
     const production = loadProduction();
-    if (!production.some(item => item.jobId === job.id)) saveProduction([...production, { jobId: job.id, material: "Granite", slabCount: 0, squareFeet: 0, sinkType: "None", caulkTubes: 0, clips: 0, status: "Pending", updatedAt: new Date().toISOString(), notes: "New job created from Jobs." }]);
-    setShowNewJob(false);
-    window.location.reload();
+    const nextProduction = production.some(item => item.jobId === job.id)
+      ? production
+      : [...production, { jobId: job.id, material: "Granite", slabCount: 0, squareFeet: 0, sinkType: "None", caulkTubes: 0, clips: 0, status: "Pending", updatedAt: new Date().toISOString(), notes: "New job created from Jobs." }];
+
+    try {
+      // Persist centrally BEFORE reloading. Hydration on the next boot reads
+      // the central store and would otherwise overwrite the freshly-created job.
+      await backend.saveJobs([job]);
+      await backend.saveInstallations([nextInstallations.find(item => item.jobId === job.id)!]);
+      const newProduction = nextProduction.find(item => item.jobId === job.id);
+      if (newProduction) await backend.saveProduction([newProduction]);
+
+      write("es-install-jobs-v1", nextJobs);
+      write("es-install-installations-v1", nextInstallations);
+      saveProduction(nextProduction);
+      setShowNewJob(false);
+      window.location.reload();
+    } catch (error) {
+      console.error("New Job save failed", error);
+      setSavingJob(false);
+      alert(`Não foi possível salvar o novo Job. ${error instanceof Error ? error.message : "Verifique a conexão e tente novamente."}`);
+    }
   };
 
   if (!booted) return <div className="auth-shell"><div className="auth-card"><span className="gold-label">ES INSTALL</span><h1>Conectando…</h1><p className="muted">Sincronizando os dados centrais com o dispositivo.</p></div></div>;
 
   return <>
     <App />
-    {showNewJob && <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Create new job"><div style={modalStyle}><button className="ghost" style={closeStyle} onClick={() => setShowNewJob(false)}>Close</button><NewJobPage onCreate={createJob} onCancel={() => setShowNewJob(false)} /></div></div>}
+    {showNewJob && <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Create new job"><div style={modalStyle}><button className="ghost" style={closeStyle} onClick={() => setShowNewJob(false)} disabled={savingJob}>Close</button><NewJobPage onCreate={createJob} onCancel={() => setShowNewJob(false)} /></div></div>}
   </>;
 }
 
