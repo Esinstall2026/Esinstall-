@@ -21,6 +21,19 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
+  const map = new Map<string, T>();
+  for (const item of current) map.set(item.id.toUpperCase(), item);
+  for (const item of incoming) map.set(item.id.toUpperCase(), item);
+  return Array.from(map.values());
+}
+function mergeByJobId<T extends { jobId: string }>(current: T[], incoming: T[]): T[] {
+  const map = new Map<string, T>();
+  for (const item of current) map.set(item.jobId.toUpperCase(), item);
+  for (const item of incoming) map.set(item.jobId.toUpperCase(), item);
+  return Array.from(map.values());
+}
+
 export const localBackend: BackendProvider = {
   async getJobs() { return dataService.getJobs(); }, async saveJobs(value) { dataService.saveJobs(value); },
   async getInstallations() { return dataService.getInstallations(); }, async saveInstallations(value) { dataService.saveInstallations(value); },
@@ -40,10 +53,14 @@ export const supabaseBackend: BackendProvider = {
 };
 
 export const apiBackend: BackendProvider = {
-  getJobs: () => api<Job[]>("/jobs"), saveJobs: jobs => api<void>("/jobs", { method: "PUT", body: JSON.stringify(jobs) }),
-  getInstallations: () => api<Installation[]>("/installations"), saveInstallations: items => api<void>("/installations", { method: "PUT", body: JSON.stringify(items) }),
-  getWarranties: () => api<Warranty[]>("/warranties"), saveWarranties: items => api<void>("/warranties", { method: "PUT", body: JSON.stringify(items) }),
-  getProduction: () => api<ProductionRecord[]>("/production"), saveProduction: items => api<void>("/production", { method: "PUT", body: JSON.stringify(items) }),
+  async getJobs() { return api<Job[]>("/jobs"); },
+  async saveJobs(value) { const current = await api<Job[]>("/jobs"); await api<void>("/jobs", { method: "PUT", body: JSON.stringify(mergeById(current, value)) }); },
+  async getInstallations() { return api<Installation[]>("/installations"); },
+  async saveInstallations(value) { const current = await api<Installation[]>("/installations"); await api<void>("/installations", { method: "PUT", body: JSON.stringify(mergeByJobId(current, value)) }); },
+  async getWarranties() { return api<Warranty[]>("/warranties"); },
+  async saveWarranties(value) { const current = await api<Warranty[]>("/warranties"); await api<void>("/warranties", { method: "PUT", body: JSON.stringify(mergeByJobId(current, value)) }); },
+  async getProduction() { return api<ProductionRecord[]>("/production"); },
+  async saveProduction(value) { const current = await api<ProductionRecord[]>("/production"); await api<void>("/production", { method: "PUT", body: JSON.stringify(mergeByJobId(current, value)) }); },
 };
 
 export function createBackendProvider(): BackendProvider { return isSupabaseConfigured() ? supabaseBackend : API_BASE_URL ? apiBackend : localBackend; }
