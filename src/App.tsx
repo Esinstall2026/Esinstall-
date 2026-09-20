@@ -112,6 +112,7 @@ export default function App() {
 }
 
 function Dashboard({ jobs, installations, warranties, production, onOpenJob }: { jobs: Job[]; installations: Installation[]; warranties: WarrantyCase[]; production: ProductionRecord[]; onOpenJob: (j: Job) => void }) {
+  const orderedJobs = [...jobs].sort((a, b) => `${b.date}-${b.id}`.localeCompare(`${a.date}-${a.id}`));
   const inProgress = jobs.filter(j => ["Production", "Installation"].includes(j.status)).length;
   const today = new Date().toISOString().slice(0, 10);
   const installsToday = installations.filter(i => i.date === today).length;
@@ -142,9 +143,33 @@ function JobsPage({ jobs, search, setSearch, onOpenJob }: { jobs: Job[]; search:
   return <div className="content"><section className="page-tools"><div><span className="gold-label">JOB MANAGEMENT</span><h2>All Jobs</h2></div><button className="primary" onClick={() => alert("New Job: use the Job Folder workflow for the pilot.")}>+ New Job</button></section><div className="search-box"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by job, address, builder, community or team..."/></div><section className="panel table-panel"><div className="table-head"><span>JOB</span><span>LOCATION</span><span>BUILDER</span><span>TEAM</span><span>STATUS</span><span/></div>{rows.map(j=><button className="table-row" key={j.id} onClick={()=>onOpenJob(j)}><strong>{j.id}</strong><span>{j.address}<small>{j.community}</small></span><span>{j.builder}</span><span>{j.team}</span><Status status={j.status}/><span>→</span></button>)}</section></div>;
 }
 
+function compressEvidenceImage(file: File): Promise<string> {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onerror = () => resolve("");
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => resolve(String(reader.result || ""));
+      img.onload = () => {
+        const maxSide = 1280;
+        const scale = Math.min(1, maxSide / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
+        canvas.height = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(String(reader.result || "")); return; }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.78));
+      };
+      img.src = String(reader.result || "");
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function JobFolder({ job, onSave }: { job: Job; onSave: (j: Job) => void }) {
   const [editing,setEditing]=useState(false); const [draft,setDraft]=useState(job); const [evidence,setEvidence]=useState<Evidence[]>(()=>read(`es-install-evidence-${job.id}`,[]));
-  const add=async(e:ChangeEvent<HTMLInputElement>)=>{const files=Array.from(e.target.files??[]);if(!files.length)return;const nextItems=await Promise.all(files.map(async f=>{const base={name:f.name,type:f.type||"file",size:f.size,addedAt:new Date().toISOString()};if(!f.type.startsWith("image/"))return base;return {...base,dataUrl:await new Promise<string>(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||""));reader.onerror=()=>resolve("");reader.readAsDataURL(f)})};}));const next=[...evidence,...nextItems];try{localStorage.setItem(`es-install-evidence-${job.id}`,JSON.stringify(next))}catch{alert("Storage is full. Remove older evidence before adding another photo.");return}setEvidence(next);e.target.value=""};
+  const add=async(e:ChangeEvent<HTMLInputElement>)=>{const files=Array.from(e.target.files??[]);if(!files.length)return;const nextItems=await Promise.all(files.map(async f=>{const base={name:f.name,type:f.type||"file",size:f.size,addedAt:new Date().toISOString()};if(!f.type.startsWith("image/"))return base;return {...base,type:"image/jpeg",dataUrl:await compressEvidenceImage(f)};}));const next=[...evidence,...nextItems];try{localStorage.setItem(`es-install-evidence-${job.id}`,JSON.stringify(next))}catch{alert("Storage is full. Remove older evidence before adding another photo.");return}setEvidence(next);e.target.value=""};
   const remove=(item:Evidence)=>{const next=evidence.filter(x=>x.addedAt!==item.addedAt);setEvidence(next);write(`es-install-evidence-${job.id}`,next)};
   return <div className="content"><section className="job-folder-head"><div><span className="gold-label">JOB FOLDER</span><h2>{job.id}</h2><p>{job.address} · {job.builder} · {job.community}</p></div><div className="button-group"><button className="ghost" onClick={()=>setEditing(v=>!v)}>{editing?"Cancel":"Edit Job"}</button>{editing&&<button className="primary" onClick={()=>{onSave(draft);setEditing(false)}}>Save Changes</button>}</div></section><section className="two-column"><div className="panel"><PanelTitle label="JOB DETAILS" title="Operational Record"/><div className="form-grid"><Field label="Address"><input disabled={!editing} value={draft.address} onChange={e=>setDraft({...draft,address:e.target.value})}/></Field><Field label="Builder"><select disabled={!editing} value={draft.builder} onChange={e=>setDraft({...draft,builder:e.target.value})}>{builders.map(v=><option key={v}>{v}</option>)}</select></Field><Field label="Community"><select disabled={!editing} value={draft.community} onChange={e=>setDraft({...draft,community:e.target.value})}>{communities.map(v=><option key={v}>{v}</option>)}</select></Field><Field label="Team"><select disabled={!editing} value={draft.team} onChange={e=>setDraft({...draft,team:e.target.value})}>{teams.map(v=><option key={v}>{v}</option>)}</select></Field><Field label="Date"><input disabled={!editing} type="date" value={draft.date} onChange={e=>setDraft({...draft,date:e.target.value})}/></Field><Field label="Status"><select disabled={!editing} value={draft.status} onChange={e=>setDraft({...draft,status:e.target.value as JobStatus})}>{statuses.map(v=><option key={v}>{v}</option>)}</select></Field></div></div><div className="panel"><PanelTitle label="EVIDENCE" title="Photos & Files"/><input type="file" multiple onChange={add}/><div className="history-list">{evidence.length?evidence.map(item=><div className="history-row" key={item.addedAt}><div>{item.dataUrl&&<img src={item.dataUrl} alt={item.name} style={{width:72,height:56,objectFit:"cover",borderRadius:8,border:"1px solid #27272a",marginBottom:6}}/>}<strong>{item.name}</strong><small>{item.type} · {Math.round(item.size/1024)} KB</small></div><button className="ghost" onClick={()=>remove(item)}>Remove</button></div>):<p className="muted">No evidence uploaded yet.</p>}</div></div></section><section className="panel" style={{marginTop:14}}><PanelTitle label="WORKFLOW" title="Operational Status"/><div className="workflow-strip">{statuses.map(s=><div key={s} className={s===job.status?"workflow-step active":"workflow-step"}><span>{s===job.status?"●":"○"}</span>{s}</div>)}</div></section></div>;
 }
